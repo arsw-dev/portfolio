@@ -4,10 +4,10 @@
   "editor.formatOnSave": false,
 
   // Auto fix
-  // "editor.codeActionsOnSave": {
-  //   "source.fixAll.eslint": "explicit",
-  //   "source.organizeImports": "never"
-  // },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
 
   // Silent the stylistic rules in your IDE, but still auto fix them
   "eslint.rules.customizations": [
@@ -91,5 +91,16 @@
     "scss",
     "pcss",
     "postcss"
-  ]
+  ],
+
+  // Tanstack Router routeTree Ignores
+  "files.watcherExclude": {
+    "**/routeTree.gen.ts": true
+  },
+  "search.exclude": {
+    "**/routeTree.gen.ts": true
+  },
+  "files.readonlyInclude": {
+    "**/routeTree.gen.ts": true
+  }
 }

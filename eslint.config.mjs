@@ -1,4 +1,5 @@
 import antfuConfig from '@antfu/eslint-config';
+import tanstackQueryPlugin from '@tanstack/eslint-plugin-query';
 import { defineConfig } from 'eslint/config';
 
 const createConfig = (options, ...userConfigs) => antfuConfig({
@@ -37,7 +38,30 @@ const baseConfig = await createConfig({
   ignores: [
     'LICENSE',
     '**/node_modules/**',
+    '**/public/**',
+    '**/routeTree.gen.ts',
+    '**/dist/**',
   ],
 });
 
-export default defineConfig(baseConfig);
+const reactConfig = await createConfig({
+  react: true,
+  plugins: {
+    '@tanstack/query': tanstackQueryPlugin,
+  },
+}, {
+  files: ['site/**/*'],
+  rules: {
+    'func-style': ['off'],
+    'react/no-array-index-key': ['off'],
+    'no-restricted-syntax': ['off'],
+    'antfu/top-level-function': 'off',
+    '@tanstack/query/exhaustive-deps': 'error',
+    'unicorn/filename-case': ['error', {
+      case: 'kebabCase',
+      ignore: ['README.md', '~__root.tsx'],
+    }],
+  },
+});
+
+export default defineConfig([baseConfig, reactConfig]);

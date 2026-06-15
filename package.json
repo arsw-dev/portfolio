@@ -14,9 +14,13 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:linting",
+    "@eslint-react/eslint-plugin": "catalog:linting",
+    "@tanstack/eslint-plugin-query": "catalog:linting",
     "@types/node": "catalog:tooling",
     "eslint": "catalog:linting",
     "eslint-plugin-format": "catalog:linting",
+    "eslint-plugin-react-hooks": "catalog:linting",
+    "eslint-plugin-react-refresh": "catalog:linting",
     "husky": "catalog:tooling",
     "lint-staged": "catalog:tooling",
     "typescript": "catalog:tooling"
