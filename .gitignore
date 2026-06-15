@@ -1,7 +1,13 @@
 CLAUDE.md
 
+# Node
+node_modules
+
 # Terraform
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup
 *.tfvars
+
+# Misc.
+tmp/

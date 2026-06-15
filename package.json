@@ -1,0 +1,27 @@
+{
+  "name": "portfolio",
+  "version": "0.0.1",
+  "packageManager": "pnpm@11.7.0",
+  "description": "",
+  "author": "",
+  "license": "MIT",
+  "keywords": [],
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:linting",
+    "@types/node": "catalog:tooling",
+    "eslint": "catalog:linting",
+    "eslint-plugin-format": "catalog:linting",
+    "husky": "catalog:tooling",
+    "lint-staged": "catalog:tooling",
+    "typescript": "catalog:tooling"
+  },
+  "lint-staged": {
+    "*": "pnpm lint"
+  }
+}

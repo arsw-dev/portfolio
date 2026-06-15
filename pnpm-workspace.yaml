@@ -1,0 +1,21 @@
+minimumReleaseAge: 4320
+
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+packages:
+  - apps/*
+  - packages/*
+
+catalogs:
+  linting:
+    '@antfu/eslint-config': 9.0.0
+    eslint: 10.4.1
+    eslint-plugin-format: 2.0.1
+
+  tooling:
+    '@types/node': 25.9.3
+    husky: 9.1.7
+    lint-staged: 17.0.7
+    typescript: 6.0.3
