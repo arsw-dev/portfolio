@@ -1,0 +1,36 @@
+{
+  "name": "site",
+  "type": "module",
+  "private": true,
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "catalog:apps",
+    "@tanstack/react-devtools": "catalog:react",
+    "@tanstack/react-router": "catalog:react",
+    "@tanstack/react-router-devtools": "catalog:react",
+    "@tanstack/router-plugin": "catalog:react",
+    "lucide-react": "catalog:react",
+    "react": "catalog:react",
+    "react-dom": "catalog:react",
+    "tailwindcss": "catalog:apps"
+  },
+  "devDependencies": {
+    "@rolldown/plugin-babel": "catalog:apps",
+    "@tanstack/devtools-vite": "catalog:react",
+    "@tanstack/router-plugin": "catalog:react",
+    "@types/node": "catalog:tooling",
+    "@types/react": "catalog:react",
+    "@types/react-dom": "catalog:react",
+    "@vitejs/plugin-react": "catalog:react",
+    "babel-plugin-react-compiler": "catalog:react",
+    "typescript": "catalog:tooling",
+    "vite": "catalog:apps"
+  }
+}

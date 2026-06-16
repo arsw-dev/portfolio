@@ -6,6 +6,7 @@ const createConfig = (options, ...userConfigs) => antfuConfig({
   type: 'app',
   typescript: true,
   formatters: true,
+  unicorn: true,
   stylistic: {
     indent: 2,
     semi: true,
@@ -41,6 +42,7 @@ const baseConfig = await createConfig({
     '**/public/**',
     '**/routeTree.gen.ts',
     '**/dist/**',
+    '**/README.md',
   ],
 });
 
@@ -57,6 +59,10 @@ const reactConfig = await createConfig({
     'no-restricted-syntax': ['off'],
     'antfu/top-level-function': 'off',
     '@tanstack/query/exhaustive-deps': 'error',
+    'react-refresh/only-export-components': ['off'],
+  },
+}).override('antfu/unicorn/rules', {
+  rules: {
     'unicorn/filename-case': ['error', {
       case: 'kebabCase',
       ignore: ['README.md', '~__root.tsx'],

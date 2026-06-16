@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Colors */
+  --color-bg: #0b0d13;
+  --color-surface: #0d1018;
+  --color-border: #161f2e;
+  --color-border-faint: #111922;
+  --color-text-primary: #ccd5e8;
+  --color-text-body: #6a8aac;
+  --color-text-chrome: #3d5a78;
+  --color-accent: oklch(0.72 0.14 80);
+
+  /* Typography */
+  --font-family-sans: 'JetBrains Mono', monospace;
+  --font-family-mono: 'JetBrains Mono', monospace;
+
+  /* Animations */
+  --animate-blink: blink 1.2s step-end infinite;
+  --animate-fade-up-1: fadeUp 0.5s ease-out both 0.05s;
+  --animate-fade-up-2: fadeUp 0.6s ease-out both 0.15s;
+  --animate-fade-up-3: fadeUp 0.6s ease-out both 0.28s;
+  --animate-fade-up-4: fadeUp 0.6s ease-out both 0.4s;
+  --animate-fade-up-5: fadeUp 0.6s ease-out both 0.52s;
+  --animate-fade-up-card: fadeUp 0.7s ease-out both 0.32s;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  font-family: 'JetBrains Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+  background: #0b0d13;
+}
+
+a {
+  text-decoration: none;
+}
+
+/* Scroll fade-in — applied by useFadeIn hook */
+[data-fade] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s ease;
+}
+
+[data-fade].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
