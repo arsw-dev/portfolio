@@ -1,0 +1,38 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter site build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-github-actions
+          aws-region: us-east-1
+
+      - run: aws s3 sync site/dist/ s3://arsw-dev-portfolio-559401928721-us-east-1-an --delete
+
+      - run: aws cloudfront create-invalidation --distribution-id EO00233KMPD0C --paths "/*"
