@@ -72,6 +72,16 @@ a {
   text-decoration: none;
 }
 
+/* Prevent one-frame FOUC before fill-mode: backwards engages */
+.animate-fade-up-1,
+.animate-fade-up-2,
+.animate-fade-up-3,
+.animate-fade-up-4,
+.animate-fade-up-5,
+.animate-fade-up-card {
+  opacity: 0;
+}
+
 /* Scroll fade-in — applied by useFadeIn hook */
 [data-fade] {
   opacity: 0;
