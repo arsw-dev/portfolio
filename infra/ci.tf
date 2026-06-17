@@ -51,9 +51,43 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
       },
       {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          "arn:aws:s3:::arsw-dev-tfstate-559401928721-us-east-1",
+          "arn:aws:s3:::arsw-dev-tfstate-559401928721-us-east-1/*",
+        ]
+      },
+      {
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
         Resource = aws_cloudfront_distribution.portfolio.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "acm:DescribeCertificate",
+          "acm:ListTagsForCertificate",
+          "cloudfront:GetDistribution",
+          "cloudfront:GetDistributionConfig",
+          "cloudfront:GetOriginAccessControl",
+          "cloudfront:GetOriginAccessControlConfig",
+          "cloudfront:ListTagsForResource",
+          "iam:GetOpenIDConnectProvider",
+          "iam:GetRole",
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+          "iam:ListRolePolicies",
+          "s3:Get*",
+          "s3:List*",
+        ]
+        Resource = "*"
       }
     ]
   })
