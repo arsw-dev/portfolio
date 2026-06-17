@@ -31,7 +31,7 @@ jobs:
         run: terraform plan -no-color 2>&1 | tee plan.txt
         working-directory: infra
 
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         if: always() && hashFiles('infra/plan.txt') != ''
         with:
           script: |
