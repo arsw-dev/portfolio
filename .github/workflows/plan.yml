@@ -37,6 +37,7 @@ jobs:
           script: |
             const fs = require('fs');
             const plan = fs.readFileSync('infra/plan.txt', 'utf8');
+            if (plan.includes('No changes.')) return;
             const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n...(truncated)' : plan;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
