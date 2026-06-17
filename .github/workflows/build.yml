@@ -3,19 +3,31 @@ name: Build
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'site/**'
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            site:
+              - 'site/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+
   build:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
 
     steps:
       - uses: actions/checkout@v6
