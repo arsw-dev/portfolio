@@ -3,6 +3,13 @@ name: Terraform Plan
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'infra/**'
+      - .github/workflows/plan.yml
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   id-token: write
@@ -23,25 +30,59 @@ jobs:
           aws-region: us-east-1
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~> 1.12
 
-      - run: terraform init
+      - name: Format check
+        run: terraform fmt -check -recursive
         working-directory: infra
 
-      - id: plan
+      - name: Init
+        run: terraform init
+        working-directory: infra
+
+      - name: Validate
+        run: terraform validate
+        working-directory: infra
+
+      - name: Plan
+        id: plan
         run: terraform plan -no-color 2>&1 | tee plan.txt
         working-directory: infra
 
-      - uses: actions/github-script@v9
-        if: always() && hashFiles('infra/plan.txt') != ''
+      - name: Post plan comment
+        uses: actions/github-script@v9
+        if: always()
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('infra/plan.txt', 'utf8');
+            const planPath = 'infra/plan.txt';
+            if (!fs.existsSync(planPath)) return;
+            const plan = fs.readFileSync(planPath, 'utf8');
             if (plan.includes('No changes.')) return;
             const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n...(truncated)' : plan;
-            github.rest.issues.createComment({
+            const marker = '<!-- terraform-plan -->';
+            const body = `${marker}\n<details><summary>Terraform Plan</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n</details>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '```\n' + truncated + '\n```'
             });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                comment_id: existing.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }
