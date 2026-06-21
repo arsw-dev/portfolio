@@ -82,6 +82,8 @@ const Hero = () => (
         </a>
         <a
           href="https://www.linkedin.com/in/aryan-swaminath/"
+          target="_blank"
+          rel="noopener noreferrer"
           className="border-b border-[#192232] pb-[3px] text-[12px] text-[#2c3f58] transition-[color,border-color] duration-200 hover:border-accent hover:text-text-primary text-nowrap"
         >
           linkedin ↗
