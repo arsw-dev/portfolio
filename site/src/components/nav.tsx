@@ -59,7 +59,7 @@ const Nav = () => {
                 key={label}
                 href={`#${link.hash}`}
                 onClick={onNavClick}
-                className="text-[11px] tracking-widest text-text-chrome transition-colors duration-150 hover:text-accent"
+                className="text-[11px] hidden tracking-widest text-text-chrome transition-colors duration-150 hover:text-accent sm:block"
               >
                 {label}
               </a>
@@ -74,7 +74,6 @@ const Nav = () => {
                 {label}
               </Link>
             ))}
-
         <Link
           {...writingLink}
           className="text-[11px] tracking-widest transition-colors duration-150 hover:text-accent"

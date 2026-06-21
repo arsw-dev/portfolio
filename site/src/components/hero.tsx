@@ -60,7 +60,7 @@ const Hero = () => (
         <span className="text-[11px] tracking-[0.2em] text-text-chrome lowercase">[aryan.swaminath]</span>
       </div>
       <div className="mt-[38px] animate-fade-up-2">
-        <h1 className="text-[clamp(46px,6.5vw,82px)] font-medium leading-[1.05] tracking-[-0.022em] text-text-primary">
+        <h1 className="text-[clamp(46px,6.5vw,82px)] font-medium leading-[1.21] tracking-[-0.022em] text-text-primary">
           Aryan
           <br />
           Swaminath
@@ -81,7 +81,9 @@ const Hero = () => (
           [email redacted]
         </a>
         <a
-          href="#"
+          href="https://www.linkedin.com/in/aryan-swaminath/"
+          target="_blank"
+          rel="noopener noreferrer"
           className="border-b border-[#192232] pb-[3px] text-[12px] text-[#2c3f58] transition-[color,border-color] duration-200 hover:border-accent hover:text-text-primary text-nowrap"
         >
           linkedin ↗
