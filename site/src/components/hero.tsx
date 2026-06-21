@@ -57,7 +57,7 @@ const Hero = () => (
   <div className="grid max-w-[1200px] mx-auto items-center gap-[72px] px-15 py-14 min-h-[calc(100vh-52px)] grid-cols-[1fr_370px] max-md:grid-cols-1 max-md:gap-[40px] max-md:min-h-auto max-[900px]:px-5.5">
     <div>
       <div className="animate-fade-up-1">
-        <span className="text-[11px] tracking-[0.2em] text-text-chrome lowercase">[aryan.swaminath]</span>
+        <span className="text-[11px] tracking-[0.2em] text-text-chrome lowercase">[arsw-dev]</span>
       </div>
       <div className="mt-[38px] animate-fade-up-2">
         <h1 className="text-[clamp(46px,6.5vw,82px)] font-medium leading-[1.21] tracking-[-0.022em] text-text-primary">
@@ -75,10 +75,12 @@ const Hero = () => (
       </p>
       <div className="mt-11 flex flex-wrap gap-7 animate-fade-up-5">
         <a
-          href="#"
+          href="https://github.com/arsw-dev"
+          target="_blank"
+          rel="noopener noreferrer"
           className="border-b border-[#192232] pb-[3px] text-[12px] text-[#2c3f58] transition-[color,border-color] duration-200 hover:border-accent hover:text-text-primary"
         >
-          [email redacted]
+          github ↗
         </a>
         <a
           href="https://www.linkedin.com/in/aryan-swaminath/"
