@@ -46,6 +46,11 @@
   }
 }
 
+::selection {
+  background-color: var(--color-accent);
+  color: #0b0d13;
+}
+
 *,
 *::before,
 *::after {
