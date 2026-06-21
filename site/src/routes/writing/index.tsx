@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { posts } from '#/data/posts';
 import { useFadeIn } from '#/hooks/use-fade-in';
 
@@ -35,7 +35,7 @@ function Writing() {
               <div
                 key={post.slug}
                 data-fade
-                className={`grid grid-cols-[96px_1fr] gap-x-12 py-12 max-sm:grid-cols-1 max-sm:gap-y-3, ${idx !== posts.length - 1 ? 'border-b border-[#0e1520]' : ''}`}
+                className={`grid grid-cols-[96px_1fr] gap-x-12 py-12 max-sm:grid-cols-1 max-sm:gap-y-3 ${idx !== posts.length - 1 ? 'border-b border-[#0e1520]' : ''}`}
               >
                 <div className="pt-[3px] max-sm:pt-0">
                   <span className="text-[11px] font-light tracking-[0.06em] text-text-chrome whitespace-nowrap">
@@ -44,12 +44,13 @@ function Writing() {
                 </div>
                 <div>
                   <div className="mb-3 flex flex-wrap items-baseline gap-3">
-                    <a
-                      href={`/writing/${post.slug}`}
+                    <Link
+                      to="/writing/$slug"
+                      params={{ slug: post.slug }}
                       className="text-[15px] font-medium text-text-primary transition-colors duration-150 hover:text-accent"
                     >
                       {post.title}
-                    </a>
+                    </Link>
                     <div className="flex flex-shrink-0 gap-2">
                       {post.tags.map(tag => (
                         <span key={tag} className="text-[10px] tracking-[0.06em] text-accent">
