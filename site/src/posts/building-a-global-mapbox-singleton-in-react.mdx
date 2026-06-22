@@ -1,0 +1,102 @@
+Mapbox is not cheap to initialize, and I mean that in two distinct ways. There's the *performance* cost, where every new map spins up a WebGL context, fetches tiles, and wires up event listeners. And then there's the literal *billing* cost: Mapbox charges per map load. On a mobile web view where users hop between map-heavy pages, we were paying both prices on every single navigation.
+
+Here's how I noticed the problem, chased the obvious fix down a dead end, and landed on a global singleton instead.
+
+## The symptom: jitter
+
+The first thing I noticed wasn't a line on an invoice, it was a visible stutter. Anywhere we rendered a map, there was an abrupt lag when the component mounted. At first I assumed it was a normal render hiccup, but it was worse than that.
+
+We render maps with [`react-map-gl`](https://visgl.github.io/react-map-gl/), which wraps Mapbox GL JS in a React-friendly component (Mapbox doesn't ship JSX out of the box). The problem is that a map isn't a cheap component to mount. Every time `<Map>` mounted, Mapbox drew the whole thing from scratch; every time it unmounted, it tore the whole thing down.
+
+```tsx title="MapView.tsx"
+// ❌ A fresh map on every mount, destroyed on every unmount
+function MapView({ longitude, latitude }) {
+  return (
+    <Map
+      initialViewState={{ longitude, latitude, zoom: 12 }}
+      mapStyle="mapbox://styles/mapbox/dark-v11"
+    />
+  );
+}
+```
+
+So users got jitters every time a map appeared. Bad UX. But while reading the docs to understand *why* initialization was so heavy, I found the second half of the problem.
+
+## The symptom that costs money
+
+Mapbox bills per map load. The way we were rendering, every mount was a new billable initialization. Users who bounced in and out of map pages were quietly running up the bill, and the more we improved engagement, the worse it got. The UX problem and the cost problem turned out to be the same problem wearing two hats: **we were creating too many maps.**
+
+## The obvious fix that wasn't
+
+`react-map-gl` has a prop built for exactly this: `reuseMaps`. With it, the first `<Map>` pays the initialization cost, and subsequent mounts reuse the underlying instance instead of building a new one.
+
+```tsx title="MapView.tsx"
+<Map reuseMaps {...} />
+```
+
+One prop, problem solved. Except it wasn't.
+
+`reuseMaps` reuses the *whole* map, and that includes whatever state the last consumer left on it. The previous center coordinates, the previous zoom level, any options that had been applied. So the second component to mount a map would briefly inherit the first component's view before correcting itself. We'd swapped a fresh-init jitter for a wrong-location flash.
+
+The instinct here is to reach for a `useRef` in each component and have it correct the config on mount. But that's the trap: if every component manages the shared map's state independently, you have N components all reaching into one global object with no coordination. The map's state becomes whoever-touched-it-last. The reuse was right; the *ownership* was wrong.
+
+## The actual fix: one map, centrally owned
+
+The map is a singleton, so its lifecycle and configuration should be owned in exactly one place, not scattered across every component that happens to render it. That place is a context provider.
+
+Three pieces make it work:
+
+**1. A hidden, pre-warmed map.** The provider mounts a single `<Map reuseMaps>` offscreen and lets it initialize in the background. By the time a user navigates to a page that shows a map, the WebGL context and base tiles are already warm, no first-paint jitter. Crucially, this still goes *through* `react-map-gl`. I considered driving a raw `mapboxgl.Map` by hand, but that means fighting the library for control of rendering, which defeats the entire reason we use it.
+
+```tsx title="MapProvider.tsx"
+const MapProvider = ({ children }) => {
+  const mapRef = useRef(null);
+
+  const setView = ({ longitude, latitude, zoom = 12 }) => {
+    mapRef.current?.flyTo({ center: [longitude, latitude], zoom });
+  };
+
+  const teardown = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    // clear anything a consumer added, reset to sensible defaults
+    map.getStyle().layers
+      .filter((l) => l.id.startsWith('consumer-'))
+      .forEach((l) => map.removeLayer(l.id));
+    setView(DEFAULT_VIEW);
+  };
+
+  return (
+    <MapContext.Provider value={{ setView, teardown }}>
+      {/* warmed offscreen, never unmounted */}
+      <div style={{ position: 'absolute', visibility: 'hidden' }}>
+        <Map reuseMaps ref={mapRef} mapStyle={MAP_STYLE} />
+      </div>
+      {children}
+    </MapContext.Provider>
+  );
+};
+```
+
+**2. Consumers apply config through the context, not the ref.** When a page needs the map, it asks the provider to point the map somewhere. Our app receives user geolocation either as a zip code or as lat/lon; that resolves to a center and a sensible zoom, which preloads the right tilesets before the map is even visible.
+
+```tsx title="StorePage.tsx"
+const { setView, teardown } = useMap();
+
+useEffect(() => {
+  setView({ longitude, latitude, zoom: 13 });
+  return teardown; // opt into cleanup on unmount
+}, [longitude, latitude]);
+```
+
+**3. A teardown that resets, not destroys.** When a consumer unmounts, it opts into `teardown`, which clears any layers, sources, and markers it added and returns the map to default lat/lon/zoom. The map instance itself is never removed, only its *contents* are reset, so the next consumer starts from a clean, predictable state instead of inheriting leftovers.
+
+Note the division of responsibility: the global singleton only owns the boring, shared stuff, position and zoom. It is *not* a global store for layers and sources. Any map that needs its own layers manages those itself and cleans them up on the way out. The singleton resets to a sane baseline; it doesn't try to know about every feature any page might draw.
+
+## The caveat worth stating loudly
+
+This works because **only one map is visible at a time.** It's a singleton, there is exactly one instance. If your UI shows two maps side by side, this approach falls apart and you're back to multiple instances (and multiple initializations). In practice, the overwhelming majority of apps only ever show one map at once, so this is rarely a real constraint, but it's the assumption the whole design rests on, so know it's there.
+
+## What I'd do next
+
+Right now we warm the map eagerly, on the theory that most sessions will eventually hit a map page. But that means we pay Mapbox even for users who never open one. The better version is lazy: skip the background warmup entirely and initialize on demand the moment a user navigates somewhere that needs a map, with a graceful loading state to hide the first-paint cost. That way we only pay for maps that are actually used, turning the cost from per-session into per-actual-need.

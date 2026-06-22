@@ -51,6 +51,11 @@
   color: #0b0d13;
 }
 
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
 *,
 *::before,
 *::after {

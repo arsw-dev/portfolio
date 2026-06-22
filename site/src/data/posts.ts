@@ -8,14 +8,14 @@ type Post = {
 };
 
 const posts: Post[] = [
-  // {
-  //   slug: 'building-a-global-mapbox-singleton-in-react',
-  //   date: 'Jun 2025',
-  //   title: 'Building a Global Mapbox Singleton in React',
-  //   tags: ['react', 'maps'],
-  //   summary: 'How we went from per-page map initialization to a single shared instance, cutting costs and improving load performance across a mobile web view.',
-  //   readingTime: '6 min read',
-  // },
+  {
+    slug: 'building-a-global-mapbox-singleton-in-react',
+    date: 'Jun 2025',
+    title: 'Building a Global Mapbox Singleton in React',
+    tags: ['react', 'maps'],
+    summary: 'How we went from per-page map initialization to a single shared instance, cutting costs and improving load performance across a mobile web view.',
+    readingTime: '6 min read',
+  },
   // {
   //   slug: 'custom-data-tables-with-tanstack-query',
   //   date: 'Apr 2025',

@@ -1,7 +1,23 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { posts } from '#/data/posts';
+import { useFadeIn } from '#/hooks/use-fade-in';
 
 const mdxModules = import.meta.glob('../../posts/*.mdx');
+
+const MdxLink = ({ href, ...props }: React.ComponentProps<'a'>) => {
+  const isExternal = !!href && /^https?:\/\//.test(href);
+
+  return (
+    <a
+      href={href}
+      {...(isExternal && { target: '_blank', rel: 'noopener noreferrer' })}
+      {...props}
+      className="underline! hover:text-accent!"
+    />
+  );
+};
+
+const mdxComponents = { a: MdxLink };
 
 export const Route = createFileRoute('/writing/$slug')({
   loader: async ({ params }) => {
@@ -9,7 +25,7 @@ export const Route = createFileRoute('/writing/$slug')({
     const load = mdxModules[key];
     if (!load)
       throw redirect({ to: '/writing' });
-    const mod = await load() as { default: React.ComponentType };
+    const mod = await load() as { default: React.ComponentType<import('mdx/types').MDXProps> };
     return { Content: mod.default };
   },
   component: BlogPost,
@@ -23,6 +39,8 @@ function BlogPost() {
   const idx = posts.findIndex(p => p.slug === slug);
   const post = posts[idx];
   const next = posts[idx + 1];
+
+  useFadeIn();
 
   if (!post)
     return null;
@@ -53,9 +71,9 @@ function BlogPost() {
         </div>
       </div>
       <div className="mx-auto max-w-[760px] px-15 pb-24 border-t border-border-faint max-[900px]:px-5.5">
-        <article className="prose pt-12">
+        <article className="prose pt-12 animate-fade-up-2" data-fade>
           {/* eslint-disable-next-line react/static-components -- same as above */}
-          <Content />
+          <Content components={mdxComponents} />
         </article>
         <div className="mt-16 flex items-center justify-between border-t border-border-faint pt-10">
           <Link to="/writing" className="text-[12px] text-text-chrome transition-colors duration-150 hover:text-accent">
