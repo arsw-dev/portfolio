@@ -69,7 +69,7 @@ const Nav = () => {
                 key={label}
                 {...link}
                 onClick={onNavClick}
-                className="text-[11px] tracking-widest text-text-chrome transition-colors duration-150 hover:text-accent"
+                className="text-[11px] hidden tracking-widest text-text-chrome transition-colors duration-150 hover:text-accent sm:block"
               >
                 {label}
               </Link>
