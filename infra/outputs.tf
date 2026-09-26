@@ -18,7 +18,7 @@ output "acm_certificate_arn" {
   value       = module.site.certificate_arn
 }
 
-output "github_actions_role_arn" {
-  description = "IAM role ARN for GitHub Actions OIDC — referenced in deploy.yml"
-  value       = aws_iam_role.github_actions.arn
+output "deploy_role_arn" {
+  description = "IAM role for the deploy workflow, referenced in deploy.yml"
+  value       = module.site.deploy_role_arn
 }

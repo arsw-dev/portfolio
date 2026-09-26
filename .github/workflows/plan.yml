@@ -21,12 +21,20 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
 
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [infra, infra/bootstrap]
+
+    env:
+      PLAN_DIR: ${{ matrix.dir }}
+
     steps:
       - uses: actions/checkout@v7
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-github-actions
+          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-terraform-plan
           aws-region: us-east-1
 
       - uses: hashicorp/setup-terraform@v4
@@ -35,20 +43,20 @@ jobs:
 
       - name: Format check
         run: terraform fmt -check -recursive
-        working-directory: infra
+        working-directory: ${{ matrix.dir }}
 
       - name: Init
         run: terraform init
-        working-directory: infra
+        working-directory: ${{ matrix.dir }}
 
       - name: Validate
         run: terraform validate
-        working-directory: infra
+        working-directory: ${{ matrix.dir }}
 
       - name: Plan
         id: plan
         run: terraform plan -no-color 2>&1 | tee plan.txt
-        working-directory: infra
+        working-directory: ${{ matrix.dir }}
 
       - name: Post plan comment
         uses: actions/github-script@v9
@@ -56,13 +64,14 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const planPath = 'infra/plan.txt';
+            const dir = process.env.PLAN_DIR;
+            const planPath = `${dir}/plan.txt`;
             if (!fs.existsSync(planPath)) return;
             const plan = fs.readFileSync(planPath, 'utf8');
             if (plan.includes('No changes.')) return;
             const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n...(truncated)' : plan;
-            const marker = '<!-- terraform-plan -->';
-            const body = `${marker}\n<details><summary>Terraform Plan</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n</details>`;
+            const marker = `<!-- terraform-plan:${dir} -->`;
+            const body = `${marker}\n<details><summary>Terraform Plan: ${dir}</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n</details>`;
 
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,

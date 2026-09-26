@@ -30,3 +30,14 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "github_repo" {
+  description = "GitHub repository (owner/repo) allowed to deploy the site"
+  type        = string
+}
+
+variable "github_environment" {
+  description = "GitHub environment whose jobs may assume the deploy role"
+  type        = string
+  default     = "production"
+}

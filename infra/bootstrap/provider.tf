@@ -10,7 +10,7 @@ terraform {
 
   backend "s3" {
     bucket       = "arsw-dev-tfstate-559401928721-us-east-1"
-    key          = "portfolio/terraform.tfstate"
+    key          = "bootstrap/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
@@ -18,5 +18,5 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region = "us-east-1"
 }

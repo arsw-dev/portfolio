@@ -4,4 +4,5 @@ module "site" {
   name        = "arsw-portfolio"
   domains     = [var.domain, var.www_domain]
   bucket_name = var.bucket_name
+  github_repo = "arsw-dev/portfolio"
 }
