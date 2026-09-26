@@ -75,6 +75,8 @@ resource "aws_iam_role_policy" "github_actions" {
           "acm:ListTagsForCertificate",
           "cloudfront:GetDistribution",
           "cloudfront:GetDistributionConfig",
+          "cloudfront:DescribeFunction",
+          "cloudfront:GetFunction",
           "cloudfront:GetOriginAccessControl",
           "cloudfront:GetOriginAccessControlConfig",
           "cloudfront:ListTagsForResource",

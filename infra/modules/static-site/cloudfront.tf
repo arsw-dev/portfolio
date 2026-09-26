@@ -1,21 +1,28 @@
 resource "aws_cloudfront_origin_access_control" "this" {
-  name                              = local.oac_name
-  description                       = local.oac_description
+  name                              = var.name
+  description                       = "CloudFront access to the ${var.name} bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_function" "viewer_request" {
+  name    = "${var.name}-viewer-request"
+  runtime = "cloudfront-js-2.0"
+  comment = "SPA routing for ${var.name}"
+  publish = true
+  code    = file("${path.module}/functions/viewer-request.js")
+}
+
 resource "aws_cloudfront_distribution" "this" {
   enabled             = true
   is_ipv6_enabled     = true
+  http_version        = "http2and3"
   default_root_object = "index.html"
   aliases             = var.domains
   price_class         = var.price_class
 
-  tags = {
-    Name = var.name
-  }
+  tags = local.tags
 
   origin {
     domain_name              = aws_s3_bucket.this.bucket_regional_domain_name
@@ -24,12 +31,18 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = local.origin_id
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
-    cache_policy_id        = local.cache_policy_id
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = local.origin_id
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    cache_policy_id            = local.cache_policy_id
+    response_headers_policy_id = local.response_headers_policy_id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.viewer_request.arn
+    }
   }
 
   restrictions {
