@@ -25,12 +25,8 @@ variable "price_class" {
   default     = "PriceClass_All"
 }
 
-variable "legacy_names" {
-  description = "Temporary: console-generated names on resources imported from the original portfolio setup. Removed once those resources are renamed."
-  type = object({
-    origin_id       = string
-    oac_name        = string
-    oac_description = string
-  })
-  default = null
+variable "tags" {
+  description = "Extra tags for taggable resources. Name, site and managed_by are always set"
+  type        = map(string)
+  default     = {}
 }

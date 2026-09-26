@@ -1,5 +1,6 @@
 resource "aws_s3_bucket" "this" {
   bucket = local.bucket_name
+  tags   = local.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
