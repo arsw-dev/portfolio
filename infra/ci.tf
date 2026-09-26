@@ -46,8 +46,8 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:ListBucket",
         ]
         Resource = [
-          aws_s3_bucket.portfolio.arn,
-          "${aws_s3_bucket.portfolio.arn}/*",
+          module.site.bucket_arn,
+          "${module.site.bucket_arn}/*",
         ]
       },
       {
@@ -66,7 +66,7 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
-        Resource = aws_cloudfront_distribution.portfolio.arn
+        Resource = module.site.distribution_arn
       },
       {
         Effect = "Allow"
