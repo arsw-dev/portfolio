@@ -27,3 +27,8 @@ output "certificate_arn" {
   description = "ACM certificate ARN"
   value       = aws_acm_certificate.this.arn
 }
+
+output "deploy_role_arn" {
+  description = "IAM role assumed by the deploy workflow"
+  value       = aws_iam_role.deploy.arn
+}

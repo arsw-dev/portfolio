@@ -54,7 +54,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-github-actions
+          role-to-assume: arn:aws:iam::559401928721:role/arsw-portfolio-deploy
           aws-region: us-east-1
 
       - run: aws s3 sync site/dist/ s3://arsw-dev-portfolio-559401928721-us-east-1-an --delete
