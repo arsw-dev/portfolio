@@ -1,25 +1,47 @@
 name: Terraform Plan
 
+# Runs on every PR so the "Plan result" check always reports (a required check that never reports blocks
+# merging). The jobs themselves only run when infra changed.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'infra/**'
-      - .github/workflows/plan.yml
 
 concurrency:
   group: terraform-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  id-token: write
   contents: read
-  pull-requests: write
+
+defaults:
+  run:
+    # Explicit bash gets -o pipefail; without it `terraform plan | tee` passes even when the plan fails
+    shell: bash
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'infra/**'
+              - '.github/workflows/plan.yml'
+
   plan:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' && github.actor != 'dependabot[bot]'
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
 
     strategy:
       fail-fast: false
@@ -30,17 +52,18 @@ jobs:
       PLAN_DIR: ${{ matrix.dir }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-terraform-plan
-          aws-region: us-east-1
-
-      - uses: hashicorp/setup-terraform@v4
+      # Installed before credentials exist, so no third-party setup code runs with them
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           # Exact version: must match the Terraform used for local applies (setup-terraform treats ~> as npm-style ~, i.e. patch-only)
           terraform_version: 1.15.6
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-terraform-plan
+          aws-region: us-east-1
 
       - name: Format check
         run: terraform fmt -check -recursive
@@ -60,7 +83,7 @@ jobs:
         working-directory: ${{ matrix.dir }}
 
       - name: Post plan comment
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         if: always()
         with:
           script: |
@@ -101,12 +124,16 @@ jobs:
   # LIVE function is this branch's code.
   cloudfront-function-live:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' && github.actor != 'dependabot[bot]'
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-terraform-plan
           aws-region: us-east-1
@@ -114,3 +141,14 @@ jobs:
       - run: infra/modules/static-site/functions/test-live.sh
         env:
           FUNCTION_NAME: arsw-portfolio-viewer-request
+
+  # Required status check. Fails if any job failed or was cancelled; skipped jobs (no infra changes) are fine.
+  result:
+    name: Plan result
+    runs-on: ubuntu-latest
+    needs: [changes, plan, cloudfront-function-live]
+    if: always()
+
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
