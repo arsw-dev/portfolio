@@ -349,8 +349,16 @@ run "bucket_is_private_and_only_readable_by_this_distribution" {
   }
 
   assert {
-    condition     = length(jsondecode(aws_s3_bucket_policy.this.policy).Statement) == 2 && alltrue([for statement in jsondecode(aws_s3_bucket_policy.this.policy).Statement : statement.Principal.Service == "cloudfront.amazonaws.com"])
-    error_message = "The bucket policy should grant only CloudFront, and only these two statements."
+    condition     = length(jsondecode(aws_s3_bucket_policy.this.policy).Statement) == 3 && alltrue([for statement in jsondecode(aws_s3_bucket_policy.this.policy).Statement : statement.Principal.Service == "cloudfront.amazonaws.com"])
+    error_message = "The bucket policy should only concern CloudFront: read, list, and the build-record deny."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_s3_bucket_policy.this.policy).Statement :
+      statement.Effect == "Deny" && statement.Action == "s3:GetObject" && statement.Resource == "${aws_s3_bucket.this.arn}/_deploys/*"
+    ])
+    error_message = "CloudFront should be denied build records at the origin, however the path is encoded."
   }
 
   assert {

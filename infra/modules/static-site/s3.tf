@@ -34,7 +34,9 @@ resource "aws_s3_bucket_policy" "this" {
       {
         # Without ListBucket, S3 answers a missing key with 403, so missing files looked "forbidden" rather than
         # "not found". Only CloudFront, only for this distribution; viewers can't list the bucket through it
-        # (the routing function turns / into /index.html, and query strings aren't forwarded).
+        # because the routing function turns / into /index.html and query strings aren't forwarded.
+        # That makes this safe only while EVERY cache behaviour on this origin runs the routing function: a
+        # behaviour without it would expose a full bucket listing at its path.
         Sid       = "AllowCloudFrontToReportMissingFiles"
         Effect    = "Allow"
         Principal = { Service = "cloudfront.amazonaws.com" }
@@ -45,6 +47,16 @@ resource "aws_s3_bucket_policy" "this" {
             "AWS:SourceArn" = aws_cloudfront_distribution.this.arn
           }
         }
+      },
+      {
+        # Build records are deploy bookkeeping. The routing function answers /_deploys/ with 404, but URL
+        # encodings (/%5Fdeploys/…) reach S3 decoded; denying CloudFront the keys holds however the path is written.
+        # The deploy role (an IAM principal, not this service principal) is unaffected.
+        Sid       = "DenyCloudFrontBuildRecords"
+        Effect    = "Deny"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.this.arn}/_deploys/*"
       },
     ]
   })
