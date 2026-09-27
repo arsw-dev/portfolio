@@ -14,8 +14,8 @@ resource "aws_acm_certificate" "this" {
     create_before_destroy = true
 
     precondition {
-      condition     = data.aws_region.current.name == "us-east-1"
-      error_message = "CloudFront only uses ACM certificates from us-east-1, but this module's AWS provider is in ${data.aws_region.current.name}. Configure the provider passed to static-site for us-east-1."
+      condition     = data.aws_region.current.region == "us-east-1"
+      error_message = "CloudFront only uses ACM certificates from us-east-1, but this module's AWS provider is in ${data.aws_region.current.region}. Configure the provider passed to static-site for us-east-1."
     }
   }
 }

@@ -9,7 +9,7 @@ mock_provider "aws" {
 
   override_data {
     target = data.aws_region.current
-    values = { name = "us-east-1" }
+    values = { region = "us-east-1" }
   }
 
   mock_resource "aws_s3_bucket" {
@@ -58,7 +58,7 @@ mock_provider "aws" {
 
   override_data {
     target = data.aws_region.current
-    values = { name = "us-east-1" }
+    values = { region = "us-east-1" }
   }
 }
 
@@ -194,7 +194,7 @@ run "certificate_must_be_in_us_east_1" {
 
   override_data {
     target = data.aws_region.current
-    values = { name = "eu-west-1" }
+    values = { region = "eu-west-1" }
   }
 
   expect_failures = [aws_acm_certificate.this]
@@ -205,7 +205,7 @@ run "preview_mode_works_in_any_region" {
 
   override_data {
     target = data.aws_region.current
-    values = { name = "eu-west-1" }
+    values = { region = "eu-west-1" }
   }
 
   variables {
