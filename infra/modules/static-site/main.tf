@@ -3,7 +3,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  bucket_name = coalesce(var.bucket_name, "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}")
+  bucket_name = coalesce(var.bucket_name, "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.region}")
   origin_id   = "s3-${var.name}"
 
   has_domains = length(var.domains) > 0
