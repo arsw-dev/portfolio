@@ -256,6 +256,31 @@ describe('deploy pipeline', () => {
     assert.equal(cdn.invalidations.length, 1);
   });
 
+  it('skips hashed assets already in the bucket but still records them', async () => {
+    const { bucket, clock, run } = setup();
+    await run(siteBuild('a1', ['assets/vendor-Sh4red00.js']));
+    clock.advance(DAY_MS);
+    const writesBefore = bucket.writes.length;
+
+    const result = await run(siteBuild('b2', ['assets/vendor-Sh4red00.js']));
+
+    assert.deepEqual(result.skipped, ['assets/vendor-Sh4red00.js']);
+    assert.ok(!bucket.writes.slice(writesBefore).includes('put assets/vendor-Sh4red00.js'));
+    assert.ok((await bucket.store.getText(`_deploys/${result.buildId}.txt`)).includes('assets/vendor-Sh4red00.js'));
+  });
+
+  it('always re-uploads unhashed files under assets/, whose content can change under the same name', async () => {
+    const { bucket, clock, run } = setup();
+    await run(siteBuild('a1', ['assets/logo.png']));
+    clock.advance(DAY_MS);
+    const writesBefore = bucket.writes.length;
+
+    const result = await run(siteBuild('b2', ['assets/logo.png']));
+
+    assert.deepEqual(result.skipped, []);
+    assert.ok(bucket.writes.slice(writesBefore).includes('put assets/logo.png'));
+  });
+
   it('refuses a build without index.html', async () => {
     const { bucket, run } = setup();
 

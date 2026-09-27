@@ -19,7 +19,7 @@ resource "aws_cloudfront_distribution" "this" {
   is_ipv6_enabled     = true
   http_version        = "http2and3"
   default_root_object = "index.html"
-  aliases             = var.domains
+  aliases             = local.attached ? var.domains : []
   price_class         = var.price_class
 
   tags = local.tags
@@ -51,9 +51,12 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
+  # Custom domains use the validated ACM certificate. Otherwise the *.cloudfront.net default certificate, for which
+  # CloudFront only accepts TLSv1 as the configured minimum (it's a temporary preview address).
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate.this.arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    cloudfront_default_certificate = !local.attached
+    acm_certificate_arn            = local.attached ? aws_acm_certificate_validation.this[0].certificate_arn : null
+    ssl_support_method             = local.attached ? "sni-only" : null
+    minimum_protocol_version       = local.attached ? "TLSv1.2_2021" : "TLSv1"
   }
 }

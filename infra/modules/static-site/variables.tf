@@ -4,12 +4,30 @@ variable "name" {
 }
 
 variable "domains" {
-  description = "Domains served by the site. The first is canonical; all become CloudFront aliases and certificate names"
+  description = "Custom domains for the site. The first is canonical; all become certificate names and, once attached, CloudFront aliases. Empty runs the site at its *.cloudfront.net preview address only"
   type        = list(string)
+  default     = []
 
   validation {
-    condition     = length(var.domains) > 0
-    error_message = "At least one domain is required."
+    condition     = length(distinct(var.domains)) == length(var.domains)
+    error_message = "domains must not contain duplicates."
+  }
+}
+
+variable "attach_domains" {
+  description = "Attach domains and their certificate to CloudFront. With DNS managed by hand, set false first to request the certificate and get certificate_validation_records, add the records, then set true. The apply that attaches waits for the certificate to be issued"
+  type        = bool
+  default     = true
+}
+
+variable "noncurrent_version_retention_days" {
+  description = "Days to keep overwritten or deleted site files (bucket versioning) before they expire"
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.noncurrent_version_retention_days >= 1
+    error_message = "noncurrent_version_retention_days must be at least 1."
   }
 }
 

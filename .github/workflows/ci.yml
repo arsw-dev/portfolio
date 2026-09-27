@@ -102,6 +102,17 @@ jobs:
           terraform init -backend=false -input=false
           terraform test
 
+      # terraform test compares values, and a validated certificate's ARN equals the unvalidated one, so the rule
+      # that CloudFront waits for validation is checked on the dependency graph instead
+      - name: Check CloudFront Waits for Certificate Validation
+        if: ${{ !cancelled() }}
+        working-directory: infra/modules/static-site
+        run: |
+          if ! terraform graph | grep -qF '"aws_cloudfront_distribution.this" -> "aws_acm_certificate_validation.this"'; then
+            echo "::error::aws_cloudfront_distribution.this must take its certificate from aws_acm_certificate_validation.this"
+            exit 1
+          fi
+
       - name: Test Account Bootstrap Module
         if: ${{ !cancelled() }}
         working-directory: infra/modules/account-bootstrap

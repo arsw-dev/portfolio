@@ -25,7 +25,17 @@ mock_provider "aws" {
   }
 
   mock_resource "aws_acm_certificate" {
-    defaults = { arn = "arn:aws:acm:us-east-1:123456789012:certificate/mock" }
+    defaults = {
+      arn = "arn:aws:acm:us-east-1:123456789012:certificate/mock"
+      domain_validation_options = [
+        {
+          domain_name           = "acme.com"
+          resource_record_name  = "_abc.acme.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_xyz.acm-validations.aws."
+        },
+      ]
+    }
   }
 }
 
@@ -39,12 +49,12 @@ run "certificate_and_aliases_cover_all_domains" {
   command = apply
 
   assert {
-    condition     = aws_acm_certificate.this.domain_name == "acme.com"
+    condition     = aws_acm_certificate.this[0].domain_name == "acme.com"
     error_message = "The first domain should be the certificate's primary name."
   }
 
   assert {
-    condition     = toset(aws_acm_certificate.this.subject_alternative_names) == toset(["www.acme.com"])
+    condition     = toset(aws_acm_certificate.this[0].subject_alternative_names) == toset(["www.acme.com"])
     error_message = "The remaining domains should be certificate SANs."
   }
 
@@ -54,8 +64,27 @@ run "certificate_and_aliases_cover_all_domains" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.this.viewer_certificate[0].acm_certificate_arn == aws_acm_certificate.this.arn
-    error_message = "The distribution should use the module's certificate."
+    condition     = output.domains_attached
+    error_message = "Domains should be attached by default."
+  }
+}
+
+run "attached_certificate_goes_through_validation" {
+  command = apply
+
+  assert {
+    condition     = length(aws_acm_certificate_validation.this) == 1 && aws_acm_certificate_validation.this[0].certificate_arn == aws_acm_certificate.this[0].arn
+    error_message = "An attached certificate should be waited on until issued."
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.this.viewer_certificate[0].acm_certificate_arn == aws_acm_certificate_validation.this[0].certificate_arn
+    error_message = "The distribution should take the certificate from the validation step, never straight from the request."
+  }
+
+  assert {
+    condition     = !aws_cloudfront_distribution.this.viewer_certificate[0].cloudfront_default_certificate && aws_cloudfront_distribution.this.viewer_certificate[0].minimum_protocol_version == "TLSv1.2_2021"
+    error_message = "Custom domains should use the ACM certificate with TLS 1.2 minimum."
   }
 }
 
@@ -67,19 +96,133 @@ run "single_domain_has_no_sans" {
   }
 
   assert {
-    condition     = length(coalesce(aws_acm_certificate.this.subject_alternative_names, toset([]))) == 0
+    condition     = length(coalesce(aws_acm_certificate.this[0].subject_alternative_names, toset([]))) == 0
     error_message = "A single domain should produce no SANs."
   }
 }
 
-run "requires_a_domain" {
-  command = plan
+run "preview_mode_without_domains" {
+  command = apply
 
   variables {
     domains = []
   }
 
+  assert {
+    condition     = length(aws_acm_certificate.this) == 0 && length(aws_acm_certificate_validation.this) == 0
+    error_message = "No domains should mean no certificate."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.this.aliases) == 0
+    error_message = "No domains should mean no aliases."
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.this.viewer_certificate[0].cloudfront_default_certificate
+    error_message = "Preview mode should use the *.cloudfront.net default certificate."
+  }
+
+  assert {
+    condition     = output.certificate_arn == null && length(output.certificate_validation_records) == 0 && length(output.domain_records) == 0
+    error_message = "Preview mode should output no certificate or DNS records."
+  }
+}
+
+run "requesting_a_certificate_without_attaching_leaves_the_site_alone" {
+  command = apply
+
+  variables {
+    attach_domains = false
+  }
+
+  assert {
+    condition     = length(aws_acm_certificate.this) == 1 && length(aws_acm_certificate_validation.this) == 0
+    error_message = "The certificate should be requested but not waited on."
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_distribution.this.aliases) == 0 && aws_cloudfront_distribution.this.viewer_certificate[0].cloudfront_default_certificate
+    error_message = "The distribution should stay on its preview address until domains are attached."
+  }
+
+  assert {
+    # Compared as JSON: the output is a list of objects and the literal a tuple, which never compare equal
+    condition = jsonencode(output.certificate_validation_records) == jsonencode([{
+      name  = "_abc.acme.com."
+      type  = "CNAME"
+      value = "_xyz.acm-validations.aws."
+    }])
+    error_message = "The validation records to add to DNS should be output."
+  }
+
+  assert {
+    condition     = [for record in output.domain_records : record.name] == ["acme.com", "www.acme.com"] && alltrue([for record in output.domain_records : record.value == aws_cloudfront_distribution.this.domain_name])
+    error_message = "Each domain's CNAME target should be output."
+  }
+
+  assert {
+    condition     = !output.domains_attached
+    error_message = "domains_attached should report false."
+  }
+}
+
+run "certificate_must_be_in_us_east_1" {
+  command = plan
+
+  override_data {
+    target = data.aws_region.current
+    values = { name = "eu-west-1" }
+  }
+
+  expect_failures = [aws_acm_certificate.this]
+}
+
+run "preview_mode_works_in_any_region" {
+  command = plan
+
+  override_data {
+    target = data.aws_region.current
+    values = { name = "eu-west-1" }
+  }
+
+  variables {
+    domains = []
+  }
+
+  assert {
+    condition     = length(aws_acm_certificate.this) == 0
+    error_message = "Without a certificate the region doesn't matter."
+  }
+}
+
+run "rejects_duplicate_domains" {
+  command = plan
+
+  variables {
+    domains = ["acme.com", "acme.com"]
+  }
+
   expect_failures = [var.domains]
+}
+
+run "site_files_are_versioned_with_bounded_retention" {
+  command = apply
+
+  assert {
+    condition     = aws_s3_bucket_versioning.this.versioning_configuration[0].status == "Enabled"
+    error_message = "The site bucket should be versioned so deletes and bad deploys can be undone."
+  }
+
+  assert {
+    condition     = aws_s3_bucket_lifecycle_configuration.this.rule[0].noncurrent_version_expiration[0].noncurrent_days == 7
+    error_message = "Old versions should expire after 7 days by default."
+  }
+
+  assert {
+    condition     = aws_s3_bucket_lifecycle_configuration.this.rule[0].expiration[0].expired_object_delete_marker
+    error_message = "Leftover delete markers should be cleaned up."
+  }
 }
 
 run "bucket_name_defaults_to_name_account_region" {

@@ -6,6 +6,9 @@ locals {
   bucket_name = coalesce(var.bucket_name, "${var.name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}")
   origin_id   = "s3-${var.name}"
 
+  has_domains = length(var.domains) > 0
+  attached    = local.has_domains && var.attach_domains
+
   tags = merge(var.tags, {
     Name       = var.name
     site       = var.name

@@ -28,6 +28,34 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# Keep the last 5 old versions of every state file; older ones expire after 30 days. Most versions and delete
+# markers come from lock-file churn (use_lockfile), so this bounds growth without losing recent history.
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    id     = "expire-old-state-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days           = 30
+      newer_noncurrent_versions = 5
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.state]
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
 

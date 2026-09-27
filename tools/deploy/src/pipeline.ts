@@ -2,7 +2,9 @@
 // against the in-memory fake in pipeline.test.ts.
 //
 // 1. Hashed assets (assets/) are uploaded with a one-year immutable cache and never deleted on upload,
-//    so tabs still running an older build can lazy-load their chunks.
+//    so tabs still running an older build can lazy-load their chunks. A hashed asset already in the bucket is
+//    skipped: the hash in its name means identical content, and S3 only creates an object once its upload
+//    completes. Re-uploading would just add identical versions to the versioned bucket.
 // 2. Everything else (index.html, public/ files) is uploaded with no-cache.
 // 3. A build record (_deploys/<build id>.txt) lists every key uploaded. It's written only after all uploads
 //    succeed, so a failed deploy never counts as a build that went live.
@@ -21,6 +23,7 @@ import {
   createBuildId,
   formatRecord,
   isAsset,
+  isHashedAsset,
   parseRecord,
   RECORD_PREFIX,
   recordKey,
@@ -67,6 +70,7 @@ type DeployOptions = {
 type DeployResult = {
   buildId: string;
   uploaded: string[];
+  skipped: string[];
   staleDeleted: string[];
   pruned: string[];
 };
@@ -138,8 +142,14 @@ const deploy = async ({
   }
   previousIds.sort();
 
-  log('==> Uploading assets (immutable)');
-  await upload(assets);
+  const existingAssets = new Set((await store.list(ASSET_PREFIX)).map(({ key }) => key));
+  const skipped = assets.filter(key => isHashedAsset(key) && existingAssets.has(key));
+  const skippedSet = new Set(skipped);
+  const assetUploads = assets.filter(key => !skippedSet.has(key));
+  const uploaded = [...assetUploads, ...rootFiles];
+
+  log(`==> Uploading assets (immutable): ${assetUploads.length} new, ${skipped.length} already in the bucket`);
+  await upload(assetUploads);
 
   log('==> Uploading everything else (no-cache)');
   await upload(rootFiles);
@@ -167,7 +177,7 @@ const deploy = async ({
   const selection = selectKeptBuilds([...previousIds, buildId], now(), policy);
   if (selection.skip) {
     log(`    skipping: ${selection.reason}`);
-    return { buildId, uploaded: keys, staleDeleted, pruned: [] };
+    return { buildId, uploaded, skipped, staleDeleted, pruned: [] };
   }
 
   // This build's keys come from memory: its record may not be readable yet, and in a dry run it doesn't exist
@@ -185,7 +195,7 @@ const deploy = async ({
   }
   log(`    pruned ${pruned.length}`);
 
-  return { buildId, uploaded: keys, staleDeleted, pruned };
+  return { buildId, uploaded, skipped, staleDeleted, pruned };
 };
 
 export { deploy };
