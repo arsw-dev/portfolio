@@ -1,5 +1,5 @@
 module "site" {
-  source = "github.com/arsw-dev/spa-platform//modules/static-site?ref=d5b9555b177a64d06a5fe68cfae86c960e667fe0"
+  source = "github.com/arsw-dev/spa-platform//modules/static-site?ref=v1.0.0-rc.2"
 
   name        = "arsw-portfolio"
   domains     = [var.domain, var.www_domain]
@@ -16,7 +16,7 @@ module "site" {
 # records point at the distribution, which needs the validated certificate. One resource for both would be a cycle.
 
 module "certificate_dns" {
-  source = "github.com/arsw-dev/spa-platform//modules/cloudflare-dns?ref=d5b9555b177a64d06a5fe68cfae86c960e667fe0"
+  source = "github.com/arsw-dev/spa-platform//modules/cloudflare-dns?ref=v1.0.0-rc.2"
 
   zone_id = var.cloudflare_zone_id
   records = {
@@ -29,7 +29,7 @@ module "certificate_dns" {
 }
 
 module "site_dns" {
-  source = "github.com/arsw-dev/spa-platform//modules/cloudflare-dns?ref=d5b9555b177a64d06a5fe68cfae86c960e667fe0"
+  source = "github.com/arsw-dev/spa-platform//modules/cloudflare-dns?ref=v1.0.0-rc.2"
 
   zone_id = var.cloudflare_zone_id
   records = {

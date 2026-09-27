@@ -1,5 +1,5 @@
 module "bootstrap" {
-  source = "github.com/arsw-dev/spa-platform//modules/account-bootstrap?ref=d5b9555b177a64d06a5fe68cfae86c960e667fe0"
+  source = "github.com/arsw-dev/spa-platform//modules/account-bootstrap?ref=v1.0.0-rc.2"
 
   name              = "arsw-dev"
   state_bucket_name = "arsw-dev-tfstate-559401928721-us-east-1"
