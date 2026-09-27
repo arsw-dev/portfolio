@@ -1,7 +1,7 @@
 import type { ResponseSnapshot } from './smoke-checks.ts';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { checkDeepLink, checkFile, checkFileBody, checkHomePage, checkServedIndex, findAssetPaths } from './smoke-checks.ts';
+import { checkDeepLink, checkFile, checkFileBody, checkHomePage, checkNotFound, checkServedIndex, findAssetPaths } from './smoke-checks.ts';
 
 const response = (status: number, headers: Record<string, string>): ResponseSnapshot => ({
   status,
@@ -99,6 +99,16 @@ describe('checkFile', () => {
     assert.deepEqual(checkFile('.well-known/apple-app-site-association', shell), [
       'expected content-type to include "application/json", got "text/html; charset=utf-8"',
     ]);
+  });
+});
+
+describe('checkNotFound', () => {
+  it('passes a real 404', () => {
+    assert.deepEqual(checkNotFound(response(404, {})), []);
+  });
+
+  it('fails the 403 S3 gives for a missing key without ListBucket', () => {
+    assert.deepEqual(checkNotFound(response(403, { 'content-type': 'application/xml' })), ['expected status 404, got 403']);
   });
 });
 

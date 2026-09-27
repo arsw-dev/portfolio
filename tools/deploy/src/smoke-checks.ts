@@ -11,6 +11,12 @@ type ResponseSnapshot = {
 // A path no site defines, so it exercises the SPA fallback (CloudFront Function rewrite to /index.html)
 const DEEP_LINK_PATH = '/__smoke-test/deep-link';
 
+// A hashed-looking asset that never exists: a missing file must be a real 404, not S3's 403
+const MISSING_ASSET_PATH = '/assets/__smoke-test-Missing1.js';
+
+// Build records exist in the bucket but must never be served
+const BUILD_RECORD_PATH = '/_deploys/';
+
 const expectStatus = (response: ResponseSnapshot, status: number): string[] =>
   response.status === status ? [] : [`expected status ${status}, got ${response.status}`];
 
@@ -50,9 +56,22 @@ const checkFile = (key: string, response: ResponseSnapshot): string[] => [
   ...expectHeader(response, 'content-type', contentTypeFor(key).split(';')[0]!),
 ];
 
+const checkNotFound = (response: ResponseSnapshot): string[] => expectStatus(response, 404);
+
 const checkFileBody = (key: string, served: string, local: string): string[] =>
   served === local ? [] : [`served ${key} doesn't match the build`];
 
-export { checkDeepLink, checkFile, checkFileBody, checkHomePage, checkServedIndex, DEEP_LINK_PATH, findAssetPaths };
+export {
+  BUILD_RECORD_PATH,
+  checkDeepLink,
+  checkFile,
+  checkFileBody,
+  checkHomePage,
+  checkNotFound,
+  checkServedIndex,
+  DEEP_LINK_PATH,
+  findAssetPaths,
+  MISSING_ASSET_PATH,
+};
 
 export type { ResponseSnapshot };

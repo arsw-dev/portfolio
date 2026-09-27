@@ -116,6 +116,11 @@ const parseBuildTime = (buildId: string): Date => {
 // public/assets/) keep their name when their content changes, so they must revalidate.
 const isHashedAsset = (key: string): boolean => isAsset(key) && HASHED_NAME_PATTERN.test(key);
 
+// A record stamped after `now` plus some clock skew came from a machine with a wrong clock. Left in, it would sort
+// as the newest build forever: holding a keep slot and being treated as the previous deploy for stale-file checks.
+const isFromTheFuture = (buildId: string, now: Date, toleranceMs: number): boolean =>
+  parseBuildTime(buildId).getTime() > now.getTime() + toleranceMs;
+
 const cacheControlFor = (key: string): string => (isHashedAsset(key) ? IMMUTABLE : REVALIDATE);
 
 const contentTypeFor = (key: string): string => {
@@ -187,6 +192,7 @@ export {
   createBuildId,
   formatRecord,
   isAsset,
+  isFromTheFuture,
   isHashedAsset,
   parseBuildTime,
   parseRecord,

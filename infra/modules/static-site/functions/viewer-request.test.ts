@@ -13,12 +13,16 @@ type Request = {
   headers: Record<string, { value: string }>;
 };
 
-type Handler = (event: { request: Request }) => Request;
+type Handler = (event: { request: Request }) => Request | Response;
 
+// A case either expects the request to continue to a URI, or the function to answer with a status
 type Case = {
   uri: string;
-  expected: string;
+  expected?: string;
+  status?: number;
 };
+
+type Response = { statusCode: number };
 
 const code = readFileSync(new URL('viewer-request.js', import.meta.url), 'utf8');
 const cases: Case[] = JSON.parse(readFileSync(new URL('viewer-request.cases.json', import.meta.url), 'utf8'));
@@ -34,9 +38,15 @@ const request = (uri: string): Request => ({
 });
 
 describe('viewer-request', () => {
-  for (const { uri, expected } of cases) {
-    it(`${uri} -> ${expected}`, () => {
-      assert.equal(handler({ request: request(uri) }).uri, expected);
+  for (const { uri, expected, status } of cases) {
+    it(`${uri} -> ${status ?? expected}`, () => {
+      const result = handler({ request: request(uri) });
+      if (status !== undefined) {
+        assert.equal((result as Response).statusCode, status);
+      }
+      else {
+        assert.equal((result as Request).uri, expected);
+      }
     });
   }
 

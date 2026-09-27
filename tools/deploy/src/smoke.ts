@@ -11,13 +11,16 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { readSmokeConfig } from './env.ts';
 import { listLocalFiles } from './files.ts';
 import {
+  BUILD_RECORD_PATH,
   checkDeepLink,
   checkFile,
   checkFileBody,
   checkHomePage,
+  checkNotFound,
   checkServedIndex,
   DEEP_LINK_PATH,
   findAssetPaths,
+  MISSING_ASSET_PATH,
 } from './smoke-checks.ts';
 
 // The deploy doesn't wait for its invalidation, and the edge may hold index.html for CachingOptimized's 1s
@@ -58,6 +61,9 @@ run('home page headers', checkHomePage(home.snapshot));
 
 const deepLink = await request(`${siteUrl}${DEEP_LINK_PATH}`);
 run('deep link', checkDeepLink(deepLink.snapshot));
+
+run('missing file is a 404', checkNotFound((await request(`${siteUrl}${MISSING_ASSET_PATH}`)).snapshot));
+run('build records are not served', checkNotFound((await request(`${siteUrl}${BUILD_RECORD_PATH}`)).snapshot));
 
 const assetPaths = findAssetPaths(home.body);
 if (assetPaths.length === 0) {
