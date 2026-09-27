@@ -4,18 +4,12 @@
 //
 // Optional env: KEEP_BUILDS (default 3), KEEP_DAYS (default 7), DRY_RUN=1 (log writes instead of making them).
 
-import { readdir, readFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createCloudFrontCdn, createS3Store } from './aws.ts';
 import { readDeployConfig } from './env.ts';
+import { listLocalFiles } from './files.ts';
 import { deploy } from './pipeline.ts';
-
-const listLocalFiles = async (dir: string): Promise<string[]> => {
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-  return entries
-    .filter(entry => entry.isFile())
-    .map(entry => relative(dir, join(entry.parentPath, entry.name)).split(sep).join('/'));
-};
 
 const config = readDeployConfig();
 

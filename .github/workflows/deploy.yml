@@ -53,6 +53,8 @@ jobs:
         with:
           name: site-dist
           path: site/dist/
+          # .well-known/ files (security.txt, apple-app-site-association) are hidden and skipped by default
+          include-hidden-files: true
           retention-days: 1
 
   deploy:
@@ -100,6 +102,6 @@ jobs:
           CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
 
       - name: Smoke Test
-        run: node tools/deploy/src/smoke.ts
+        run: node tools/deploy/src/smoke.ts site/dist
         env:
           SITE_URL: ${{ vars.SITE_URL }}

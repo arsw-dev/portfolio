@@ -1,4 +1,7 @@
-// Pure checks for a deployed site. Each returns a list of failures; empty means it passed.
+// Pure checks for a deployed site. Each returns a list of failures; empty means it passed. Expected headers
+// come from plan.ts, so the smoke test holds the live site to the same rules the deploy used.
+
+import { cacheControlFor, contentTypeFor } from './plan.ts';
 
 type ResponseSnapshot = {
   status: number;
@@ -18,9 +21,14 @@ const expectHeader = (response: ResponseSnapshot, name: string, includes: string
     : [`expected ${name} to include "${includes}", got ${value === null ? 'nothing' : `"${value}"`}`];
 };
 
-// First hashed asset the page references, e.g. /assets/index-BaXPYhR1.js
-const findAssetPath = (html: string): string | undefined =>
-  /(?:src|href)="(\/assets\/[^"]+)"/.exec(html)?.[1];
+// Every hashed asset the page references, in order, without duplicates, e.g. /assets/index-BaXPYhR1.js
+const findAssetPaths = (html: string): string[] =>
+  [...new Set([...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match => match[1]!))];
+
+const checkServedIndex = (served: string, local: string): string[] =>
+  served === local
+    ? []
+    : [`served index.html (${served.length} bytes) is not this build's (${local.length} bytes); the upload didn't land or CloudFront is serving a stale copy`];
 
 const checkHomePage = (response: ResponseSnapshot): string[] => [
   ...expectStatus(response, 200),
@@ -35,11 +43,16 @@ const checkDeepLink = (response: ResponseSnapshot): string[] => [
   ...expectHeader(response, 'content-type', 'text/html'),
 ];
 
-const checkAsset = (response: ResponseSnapshot): string[] => [
+// A deployed file (key relative to the site root) is served with the cache and content type the deploy set
+const checkFile = (key: string, response: ResponseSnapshot): string[] => [
   ...expectStatus(response, 200),
-  ...expectHeader(response, 'cache-control', 'immutable'),
+  ...expectHeader(response, 'cache-control', cacheControlFor(key)),
+  ...expectHeader(response, 'content-type', contentTypeFor(key).split(';')[0]!),
 ];
 
-export { checkAsset, checkDeepLink, checkHomePage, DEEP_LINK_PATH, findAssetPath };
+const checkFileBody = (key: string, served: string, local: string): string[] =>
+  served === local ? [] : [`served ${key} doesn't match the build`];
+
+export { checkDeepLink, checkFile, checkFileBody, checkHomePage, checkServedIndex, DEEP_LINK_PATH, findAssetPaths };
 
 export type { ResponseSnapshot };

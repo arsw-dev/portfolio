@@ -48,7 +48,7 @@ resource "aws_iam_role_policy" "deploy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+        Action   = "cloudfront:CreateInvalidation"
         Resource = aws_cloudfront_distribution.this.arn
       },
     ]

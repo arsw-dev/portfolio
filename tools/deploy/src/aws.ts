@@ -2,11 +2,10 @@
 
 import type { Cdn, Store, Upload } from './pipeline.ts';
 import type { StoredObject } from './plan.ts';
-import { CloudFrontClient, CreateInvalidationCommand, waitUntilInvalidationCompleted } from '@aws-sdk/client-cloudfront';
+import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const DELETE_BATCH_SIZE = 1000;
-const INVALIDATION_TIMEOUT_SECONDS = 15 * 60;
 
 const listObjects = async (s3: S3Client, bucket: string, prefix: string): Promise<StoredObject[]> => {
   const objects: StoredObject[] = [];
@@ -78,11 +77,9 @@ const createCloudFrontCdn = (region: string, distributionId: string): Cdn => {
       if (!id) {
         throw new Error('CloudFront did not return an invalidation ID');
       }
-      console.log(`    ${id}; waiting for it to complete`);
-      await waitUntilInvalidationCompleted(
-        { client: cloudfront, maxWaitTime: INVALIDATION_TIMEOUT_SECONDS },
-        { DistributionId: distributionId, Id: id },
-      );
+      // Not waited on: root files are no-cache (the edge revalidates them) and assets are content-hashed, so new
+      // content is served without it. The smoke test confirms the new index.html is live.
+      console.log(`    ${id}`);
     },
   };
 };
