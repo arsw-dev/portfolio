@@ -341,6 +341,19 @@ run "bucket_is_private_and_only_readable_by_this_distribution" {
   }
 
   assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_s3_bucket_policy.this.policy).Statement :
+      statement.Action == "s3:ListBucket" && statement.Resource == aws_s3_bucket.this.arn && statement.Principal.Service == "cloudfront.amazonaws.com" && statement.Condition.ArnLike["AWS:SourceArn"] == aws_cloudfront_distribution.this.arn
+    ])
+    error_message = "CloudFront (this distribution only) should be able to list the bucket, so missing files return 404, not 403."
+  }
+
+  assert {
+    condition     = length(jsondecode(aws_s3_bucket_policy.this.policy).Statement) == 2 && alltrue([for statement in jsondecode(aws_s3_bucket_policy.this.policy).Statement : statement.Principal.Service == "cloudfront.amazonaws.com"])
+    error_message = "The bucket policy should grant only CloudFront, and only these two statements."
+  }
+
+  assert {
     condition     = one(aws_cloudfront_distribution.this.origin).origin_access_control_id == aws_cloudfront_origin_access_control.this.id
     error_message = "The origin should sign requests with the module's OAC."
   }

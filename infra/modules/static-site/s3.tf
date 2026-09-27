@@ -30,7 +30,22 @@ resource "aws_s3_bucket_policy" "this" {
             "AWS:SourceArn" = aws_cloudfront_distribution.this.arn
           }
         }
-      }
+      },
+      {
+        # Without ListBucket, S3 answers a missing key with 403, so missing files looked "forbidden" rather than
+        # "not found". Only CloudFront, only for this distribution; viewers can't list the bucket through it
+        # (the routing function turns / into /index.html, and query strings aren't forwarded).
+        Sid       = "AllowCloudFrontToReportMissingFiles"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:ListBucket"
+        Resource  = aws_s3_bucket.this.arn
+        Condition = {
+          ArnLike = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.this.arn
+          }
+        }
+      },
     ]
   })
 }

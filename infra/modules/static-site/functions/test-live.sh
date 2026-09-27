@@ -18,7 +18,8 @@ failures=0
 
 while read -r test_case; do
   uri="$(jq -r .uri <<< "$test_case")"
-  expected="$(jq -r .expected <<< "$test_case")"
+  # Either the rewritten URI, or "status <code>" when the function answers the request itself
+  expected="$(jq -r 'if .status then "status \(.status)" else .expected end' <<< "$test_case")"
 
   jq -n --arg uri "$uri" '{
     version: "1.0",
@@ -31,7 +32,7 @@ while read -r test_case; do
     --event-object "fileb://$event_file" --query TestResult --output json)"
 
   error="$(jq -r '.FunctionErrorMessage // empty' <<< "$result")"
-  actual="$(jq -r '.FunctionOutput // "{}" | fromjson | .request.uri // empty' <<< "$result")"
+  actual="$(jq -r '.FunctionOutput // "{}" | fromjson | if .response then "status \(.response.statusCode)" else .request.uri // empty end' <<< "$result")"
 
   if [[ -z "$error" && "$actual" == "$expected" ]]; then
     echo "pass  $uri -> $actual"
