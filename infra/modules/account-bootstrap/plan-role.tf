@@ -67,6 +67,13 @@ resource "aws_iam_role_policy" "plan" {
         Resource = "*"
       },
       {
+        # Runs a CloudFront Function against a sample event (functions/test-live.sh). Executes code, changes nothing
+        Sid      = "TestCloudFrontFunctions"
+        Effect   = "Allow"
+        Action   = "cloudfront:TestFunction"
+        Resource = "*"
+      },
+      {
         # s3:Get* above is for bucket configuration. Don't let it read object contents anywhere but the state bucket
         Sid         = "DenyObjectReadsOutsideState"
         Effect      = "Deny"

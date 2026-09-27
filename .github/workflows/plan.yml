@@ -95,3 +95,21 @@ jobs:
                 body,
               });
             }
+
+  # Runs the function test cases in CloudFront's own runtime. Infra is applied before a PR is pushed, so the
+  # LIVE function is this branch's code.
+  cloudfront-function-live:
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::559401928721:role/arsw-dev-terraform-plan
+          aws-region: us-east-1
+
+      - run: infra/modules/static-site/functions/test-live.sh
+        env:
+          FUNCTION_NAME: arsw-portfolio-viewer-request
