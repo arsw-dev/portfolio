@@ -85,10 +85,10 @@ CI pins an exact Terraform version (`terraform_version` in `.github/workflows/ci
 
 ## What's in the bucket
 
-| Prefix          | What                                                                     | Managed by                                                                                               |
-| --------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `assets/`       | Hashed build output, cached for a year                                   | Deploys upload; pruning deletes builds outside the last 3 that were replaced over 7 days ago             |
-| `_deploys/`     | One record per deploy listing every file it uploaded; never served (404) | Deploys write them; kept as deploy history                                                               |
-| everything else | `index.html` and files from `public/`, revalidated on every request      | Deploys upload; a file is deleted only if the previous deploy uploaded it and this build doesn't have it |
+| Prefix          | What                                                                                                                 | Managed by                                                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `assets/`       | Build output. Files Vite emitted (its manifest) are cached for a year; files copied from `public/assets/` revalidate | Deploys upload; pruning deletes builds outside the last 3 that were replaced over 7 days ago             |
+| `_deploys/`     | One record per deploy listing every file it uploaded; never served (404)                                             | Deploys write them; kept as deploy history                                                               |
+| everything else | `index.html` and files from `public/`, revalidated on every request                                                  | Deploys upload; a file is deleted only if the previous deploy uploaded it and this build doesn't have it |
 
-Files you place in the bucket by hand are never deleted by a deploy. The smoke test after each deploy checks the live site is the new build, every referenced asset and `.well-known` file is served correctly, missing files are 404, and build records aren't served.
+`assets/` is reserved for build output: pruning deletes any file there that no recent build lists, including one placed by hand. Outside `assets/`, files you place in the bucket by hand are never deleted by a deploy. The smoke test after each deploy checks the live site is the new build, every referenced asset and `.well-known` file is served correctly, missing files are 404, and build records aren't served.

@@ -64,10 +64,16 @@ const CONTENT_TYPES_BY_NAME: Record<string, string> = {
   'apple-app-site-association': 'application/json',
 };
 
-// Vite names hashed files <name>-<8 base64url chars>.<ext>. Requiring a digit, uppercase letter, _ or - in the
-// hash keeps names like icon-download.svg (an 8-letter word) from being cached forever; the rare all-lowercase
-// real hash just gets no-cache, which is the safe way to be wrong.
-const HASHED_NAME_PATTERN = /-(?=[\w-]{0,7}[A-Z0-9_-])[\w-]{8}\.[A-Za-z0-9]+$/;
+// Vite's build manifest (build.manifest: true) lists every file it emitted. Build metadata under .vite/ is read
+// by the deploy tool but never uploaded.
+const MANIFEST_PATH = '.vite/manifest.json';
+const BUILD_METADATA_PREFIX = '.vite/';
+
+type ViteManifestEntry = {
+  file?: unknown;
+  css?: unknown;
+  assets?: unknown;
+};
 
 type PrunePolicy = {
   keepBuilds: number;
@@ -77,6 +83,8 @@ type PrunePolicy = {
 type StoredObject = {
   key: string;
   lastModified: Date;
+  // MD5 of the content for single-part uploads (every upload this tool makes), without quotes
+  etag?: string;
 };
 
 type KeptBuilds
@@ -88,7 +96,8 @@ const JUNK_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 
 const isAsset = (key: string): boolean => key.startsWith(ASSET_PREFIX);
 
-const shouldUpload = (key: string): boolean => !JUNK_FILES.has(key.slice(key.lastIndexOf('/') + 1));
+const shouldUpload = (key: string): boolean =>
+  !key.startsWith(BUILD_METADATA_PREFIX) && !JUNK_FILES.has(key.slice(key.lastIndexOf('/') + 1));
 
 const recordKey = (buildId: string): string => `${RECORD_PREFIX}${buildId}.txt`;
 
@@ -112,16 +121,43 @@ const parseBuildTime = (buildId: string): Date => {
   return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
 };
 
-// Only content-hashed build output is safe to cache forever. Unhashed files under assets/ (copied from
-// public/assets/) keep their name when their content changes, so they must revalidate.
-const isHashedAsset = (key: string): boolean => isAsset(key) && HASHED_NAME_PATTERN.test(key);
+// The files under assets/ that Vite emitted, from its manifest. Their names contain a content hash, so a new
+// version always has a new name. Names alone can't be trusted: public/assets/team-member-1.jpg looks hashed but
+// keeps its name when its content changes. Anything not in the manifest is treated as unhashed.
+const hashedAssetsFromManifest = (manifest: unknown): Set<string> => {
+  if (typeof manifest !== 'object' || manifest === null) {
+    throw new Error('Vite manifest is not an object');
+  }
+  const files = new Set<string>();
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && isAsset(value)) {
+      files.add(value);
+    }
+  };
+  for (const entry of Object.values(manifest as Record<string, ViteManifestEntry | null>)) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    add(entry.file);
+    for (const list of [entry.css, entry.assets]) {
+      if (Array.isArray(list)) {
+        list.forEach(add);
+      }
+    }
+  }
+  return files;
+};
+
+// Only files Vite emitted with a content hash are safe to cache forever
+const isHashedAsset = (key: string, hashedAssets: ReadonlySet<string>): boolean => isAsset(key) && hashedAssets.has(key);
 
 // A record stamped after `now` plus some clock skew came from a machine with a wrong clock. Left in, it would sort
 // as the newest build forever: holding a keep slot and being treated as the previous deploy for stale-file checks.
 const isFromTheFuture = (buildId: string, now: Date, toleranceMs: number): boolean =>
   parseBuildTime(buildId).getTime() > now.getTime() + toleranceMs;
 
-const cacheControlFor = (key: string): string => (isHashedAsset(key) ? IMMUTABLE : REVALIDATE);
+const cacheControlFor = (key: string, hashedAssets: ReadonlySet<string>): string =>
+  (isHashedAsset(key, hashedAssets) ? IMMUTABLE : REVALIDATE);
 
 const contentTypeFor = (key: string): string => {
   const name = key.slice(key.lastIndexOf('/') + 1);
@@ -191,9 +227,11 @@ export {
   contentTypeFor,
   createBuildId,
   formatRecord,
+  hashedAssetsFromManifest,
   isAsset,
   isFromTheFuture,
   isHashedAsset,
+  MANIFEST_PATH,
   parseBuildTime,
   parseRecord,
   RECORD_PREFIX,

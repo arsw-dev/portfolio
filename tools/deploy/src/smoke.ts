@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readSmokeConfig } from './env.ts';
-import { listLocalFiles } from './files.ts';
+import { listLocalFiles, readHashedAssets } from './files.ts';
 import {
   BUILD_RECORD_PATH,
   checkDeepLink,
@@ -48,6 +48,7 @@ const run = (name: string, results: string[]): void => {
 };
 
 const localIndex = await readFile(join(distDir, 'index.html'), 'utf8');
+const hashedAssets = await readHashedAssets(distDir);
 
 let home = await request(`${siteUrl}/`);
 for (let attempt = 1; attempt < INDEX_ATTEMPTS && home.body !== localIndex; attempt++) {
@@ -71,13 +72,13 @@ if (assetPaths.length === 0) {
 }
 for (const path of assetPaths) {
   const asset = await request(`${siteUrl}${path}`);
-  run(`asset ${path}`, checkFile(path.slice(1), asset.snapshot));
+  run(`asset ${path}`, checkFile(path.slice(1), asset.snapshot, hashedAssets));
 }
 
 for (const key of (await listLocalFiles(distDir)).filter(key => key.startsWith('.well-known/'))) {
   const served = await request(`${siteUrl}/${key}`);
   const local = await readFile(join(distDir, key), 'utf8');
-  run(key, [...checkFile(key, served.snapshot), ...checkFileBody(key, served.body, local)]);
+  run(key, [...checkFile(key, served.snapshot, hashedAssets), ...checkFileBody(key, served.body, local)]);
 }
 
 if (failures.length > 0) {

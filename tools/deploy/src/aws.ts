@@ -15,7 +15,7 @@ const listObjects = async (s3: S3Client, bucket: string, prefix: string): Promis
     const page = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken }));
     for (const object of page.Contents ?? []) {
       if (object.Key && object.LastModified) {
-        objects.push({ key: object.Key, lastModified: object.LastModified });
+        objects.push({ key: object.Key, lastModified: object.LastModified, etag: object.ETag?.replaceAll('"', '') });
       }
     }
     continuationToken = page.NextContinuationToken;

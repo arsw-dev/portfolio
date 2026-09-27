@@ -7,6 +7,7 @@ import {
   contentTypeFor,
   createBuildId,
   formatRecord,
+  hashedAssetsFromManifest,
   isFromTheFuture,
   parseBuildTime,
   parseRecord,
@@ -85,6 +86,10 @@ describe('shouldUpload', () => {
     }
   });
 
+  it('never uploads Vite build metadata', () => {
+    assert.equal(shouldUpload('.vite/manifest.json'), false);
+  });
+
   it('uploads everything else, including other dotfiles', () => {
     for (const key of ['index.html', 'assets/index-a1.js', '.well-known/security.txt', 'DS_Store.txt']) {
       assert.equal(shouldUpload(key), true, key);
@@ -92,26 +97,58 @@ describe('shouldUpload', () => {
   });
 });
 
+// Shaped like this site's real dist/.vite/manifest.json
+const MANIFEST = {
+  '_posts-BIE8_9J4.js': { file: 'assets/posts-BIE8_9J4.js' },
+  'index.html': { file: 'assets/index-BK6ZGIxf.js', css: ['assets/index-rs8v4u0x.css'], isEntry: true },
+  'src/routes/writing/$slug.tsx?tsr-split=component': { file: 'assets/_slug-QDNn1Eue.js', isDynamicEntry: true },
+  'src/components/hero.tsx': { file: 'assets/hero-Dx81abcd.js', assets: ['assets/portrait-C0ffee12.webp'] },
+};
+const HASHED = hashedAssetsFromManifest(MANIFEST);
+const IMMUTABLE_HEADER = 'public, max-age=31536000, immutable';
+
+describe('hashedAssetsFromManifest', () => {
+  it('collects every emitted file: chunks, their CSS and imported assets', () => {
+    assert.deepEqual([...HASHED].toSorted(), [
+      'assets/_slug-QDNn1Eue.js',
+      'assets/hero-Dx81abcd.js',
+      'assets/index-BK6ZGIxf.js',
+      'assets/index-rs8v4u0x.css',
+      'assets/portrait-C0ffee12.webp',
+      'assets/posts-BIE8_9J4.js',
+    ]);
+  });
+
+  it('ignores anything outside assets/ and malformed entries', () => {
+    const hashed = hashedAssetsFromManifest({ a: { file: 'other/x-Abcdef12.js', css: 'not-a-list' }, b: null, c: { file: 42 } });
+    assert.equal(hashed.size, 0);
+  });
+
+  it('rejects a manifest that is not an object', () => {
+    assert.throws(() => hashedAssetsFromManifest(null), /not an object/);
+  });
+});
+
 describe('cacheControlFor', () => {
-  it('caches hashed assets forever', () => {
-    assert.equal(cacheControlFor('assets/index-BaXPYhR1.js'), 'public, max-age=31536000, immutable');
-  });
-
-  it('recognises every hash shape Vite produced for this site, including ones containing - and _', () => {
-    for (const key of ['assets/_slug-1YTApo-9.js', 'assets/posts-BIE8_9J4.js', 'assets/index-rs8v4u0x.css', 'assets/building-a-global-mapbox-singleton-in-react-Cjxz55MH.js']) {
-      assert.equal(cacheControlFor(key), 'public, max-age=31536000, immutable', key);
+  it('caches files Vite emitted forever', () => {
+    for (const key of HASHED) {
+      assert.equal(cacheControlFor(key, HASHED), IMMUTABLE_HEADER, key);
     }
   });
 
-  it('revalidates unhashed files under assets/ (copied from public/assets/)', () => {
-    for (const key of ['assets/logo.png', 'assets/logo-dark.png', 'assets/icon-download.svg', 'assets/logo-facebook.png', 'assets/font-Regular.woff2']) {
-      assert.equal(cacheControlFor(key), 'no-cache', key);
+  it('revalidates files that only look hashed (copied from public/assets/ under their own names)', () => {
+    for (const key of ['assets/team-member-1.jpg', 'assets/icon-arrow-up.svg', 'assets/slide-01-intro.png', 'assets/logo-Abcdef12.png', 'assets/logo.png']) {
+      assert.equal(cacheControlFor(key, HASHED), 'no-cache', key);
     }
   });
 
-  it('revalidates everything else', () => {
+  it('treats nothing as hashed without a manifest', () => {
+    assert.equal(cacheControlFor('assets/index-BK6ZGIxf.js', new Set()), 'no-cache');
+  });
+
+  it('revalidates everything outside assets/', () => {
     for (const key of ['index.html', 'favicon.svg', 'robots.txt', 'nested/assets/file.js']) {
-      assert.equal(cacheControlFor(key), 'no-cache', key);
+      assert.equal(cacheControlFor(key, HASHED), 'no-cache', key);
     }
   });
 });
