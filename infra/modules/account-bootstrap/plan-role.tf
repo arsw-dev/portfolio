@@ -42,10 +42,12 @@ resource "aws_iam_role_policy" "plan" {
         Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}"]
       },
       {
-        # Plans take the lock; only these exact lock files, so a PR can't clear or plant another root's lock
+        # Plans take the lock; only these exact lock files, so a PR can't clear or plant another root's lock.
+        # GetObject because releasing reads the lock back to check its ID before deleting it. (Not visible in
+        # CloudTrail's event history, which omits S3 object-level calls.)
         Sid      = "StateLock"
         Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}.tflock"]
       },
       {

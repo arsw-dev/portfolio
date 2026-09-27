@@ -140,6 +140,14 @@ run "plan_role_cannot_change_anything_but_its_own_lock_files" {
   assert {
     condition = anytrue([
       for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
+      statement.Sid == "StateLock" && toset(statement.Action) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"])
+    ])
+    error_message = "Taking and releasing a lock needs put, get (release checks the lock ID) and delete on the lock file."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
       statement.Sid == "ReadState" && toset(statement.Resource) == toset([
         "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate",
         "arn:aws:s3:::acme-tfstate/site/terraform.tfstate",
