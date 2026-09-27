@@ -21,3 +21,9 @@ variable "www_domain" {
   type        = string
   default     = "www.arsw.dev"
 }
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for arsw.dev"
+  type        = string
+  default     = "10db274d4ba15368f706a75491f1dab2"
+}

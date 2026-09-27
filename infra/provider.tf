@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.26"
+    }
   }
 
   backend "s3" {
@@ -20,3 +24,6 @@ terraform {
 provider "aws" {
   region = var.region
 }
+
+# Reads CLOUDFLARE_API_TOKEN: a DNS:Edit token for the arsw.dev zone locally, a DNS:Read token in CI
+provider "cloudflare" {}

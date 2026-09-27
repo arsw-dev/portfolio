@@ -12,12 +12,23 @@ variable "domains" {
     condition     = length(distinct(var.domains)) == length(var.domains)
     error_message = "domains must not contain duplicates."
   }
+
+  validation {
+    condition     = alltrue([for domain in var.domains : !startswith(domain, "*.")])
+    error_message = "Wildcard domains aren't supported: their validation record duplicates the apex's."
+  }
 }
 
 variable "attach_domains" {
   description = "Attach domains and their certificate to CloudFront. With DNS managed by hand, set false first to request the certificate and get certificate_validation_records, add the records, then set true. The apply that attaches waits for the certificate to be issued"
   type        = bool
   default     = true
+}
+
+variable "validation_record_fqdns" {
+  description = "Names of the certificate validation records, when the caller creates them in the same apply (for example from the cloudflare-dns module). Orders validation after the records exist"
+  type        = list(string)
+  default     = null
 }
 
 variable "noncurrent_version_retention_days" {

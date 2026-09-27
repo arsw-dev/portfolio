@@ -27,6 +27,10 @@ resource "aws_acm_certificate_validation" "this" {
   count = local.attached ? 1 : 0
 
   certificate_arn = aws_acm_certificate.this[0].arn
+
+  # When the caller creates the validation records in the same apply (e.g. with the cloudflare-dns module),
+  # passing their names makes this wait until they exist
+  validation_record_fqdns = var.validation_record_fqdns
 }
 
 moved {
