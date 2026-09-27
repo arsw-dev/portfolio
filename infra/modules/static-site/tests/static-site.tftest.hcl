@@ -27,6 +27,7 @@ mock_provider "aws" {
   mock_resource "aws_acm_certificate" {
     defaults = {
       arn = "arn:aws:acm:us-east-1:123456789012:certificate/mock"
+      # ACM returns names and values with trailing dots; the module strips them
       domain_validation_options = [
         {
           domain_name           = "acme.com"
@@ -34,8 +35,30 @@ mock_provider "aws" {
           resource_record_type  = "CNAME"
           resource_record_value = "_xyz.acm-validations.aws."
         },
+        {
+          domain_name           = "www.acme.com"
+          resource_record_name  = "_def.www.acme.com."
+          resource_record_type  = "CNAME"
+          resource_record_value = "_uvw.acm-validations.aws."
+        },
       ]
     }
+  }
+}
+
+# Like the real provider: computed values (the certificate's validation options) stay unknown until apply
+mock_provider "aws" {
+  alias           = "unknown_until_apply"
+  override_during = apply
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  override_data {
+    target = data.aws_region.current
+    values = { name = "us-east-1" }
   }
 }
 
@@ -147,17 +170,16 @@ run "requesting_a_certificate_without_attaching_leaves_the_site_alone" {
   }
 
   assert {
-    # Compared as JSON: the output is a list of objects and the literal a tuple, which never compare equal
-    condition = jsonencode(output.certificate_validation_records) == jsonencode([{
-      name  = "_abc.acme.com."
-      type  = "CNAME"
-      value = "_xyz.acm-validations.aws."
-    }])
-    error_message = "The validation records to add to DNS should be output."
+    # Compared as JSON: the output is a map of objects and the literal an object, which never compare equal
+    condition = jsonencode(output.certificate_validation_records) == jsonencode({
+      "acme.com"     = { name = "_abc.acme.com", type = "CNAME", value = "_xyz.acm-validations.aws" }
+      "www.acme.com" = { name = "_def.www.acme.com", type = "CNAME", value = "_uvw.acm-validations.aws" }
+    })
+    error_message = "Each domain's validation record should be output, without ACM's trailing dots."
   }
 
   assert {
-    condition     = [for record in output.domain_records : record.name] == ["acme.com", "www.acme.com"] && alltrue([for record in output.domain_records : record.value == aws_cloudfront_distribution.this.domain_name])
+    condition     = keys(output.domain_records) == ["acme.com", "www.acme.com"] && alltrue([for record in values(output.domain_records) : record.value == aws_cloudfront_distribution.this.domain_name])
     error_message = "Each domain's CNAME target should be output."
   }
 
@@ -194,6 +216,49 @@ run "preview_mode_works_in_any_region" {
     condition     = length(aws_acm_certificate.this) == 0
     error_message = "Without a certificate the region doesn't matter."
   }
+}
+
+run "record_outputs_are_keyed_by_domain_before_the_certificate_exists" {
+  # The certificate's validation options are unknown until it's requested, but a DNS module still needs the
+  # keys to for_each over in the same apply
+  command = plan
+
+  providers = {
+    aws = aws.unknown_until_apply
+  }
+
+  assert {
+    condition     = keys(output.certificate_validation_records) == ["acme.com", "www.acme.com"]
+    error_message = "Validation record keys should be the domains, known at plan time."
+  }
+
+  assert {
+    condition     = keys(output.domain_records) == ["acme.com", "www.acme.com"]
+    error_message = "Domain record keys should be the domains, known at plan time."
+  }
+}
+
+run "validation_waits_for_records_the_caller_creates" {
+  command = apply
+
+  variables {
+    validation_record_fqdns = ["_abc.acme.com", "_def.www.acme.com"]
+  }
+
+  assert {
+    condition     = toset(aws_acm_certificate_validation.this[0].validation_record_fqdns) == toset(["_abc.acme.com", "_def.www.acme.com"])
+    error_message = "Validation should be tied to the records the caller created."
+  }
+}
+
+run "rejects_wildcard_domains" {
+  command = plan
+
+  variables {
+    domains = ["acme.com", "*.acme.com"]
+  }
+
+  expect_failures = [var.domains]
 }
 
 run "rejects_duplicate_domains" {

@@ -9,6 +9,10 @@ locals {
   has_domains = length(var.domains) > 0
   attached    = local.has_domains && var.attach_domains
 
+  validation_options = local.has_domains ? {
+    for option in aws_acm_certificate.this[0].domain_validation_options : option.domain_name => option
+  } : {}
+
   tags = merge(var.tags, {
     Name       = var.name
     site       = var.name
