@@ -35,6 +35,18 @@ const positiveInteger = (name: string, fallback: number): number => {
   return value;
 };
 
+// Strict so that DRY_RUN=false or DRY_RUN=0 doesn't read as "set" and silently skip a real deploy (or vice versa)
+const parseFlag = (name: string, raw: string | undefined): boolean => {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '' || value === '0' || value === 'false') {
+    return false;
+  }
+  if (value === '1' || value === 'true') {
+    return true;
+  }
+  throw new Error(`${name} must be 1/true or 0/false, got "${raw}"`);
+};
+
 const readDeployConfig = (): DeployConfig => {
   const distDir = process.argv[2];
   if (!distDir) {
@@ -47,7 +59,7 @@ const readDeployConfig = (): DeployConfig => {
     distributionId: required('CLOUDFRONT_DISTRIBUTION_ID'),
     region: process.env.AWS_REGION ?? 'us-east-1',
     sha: process.env.GITHUB_SHA,
-    dryRun: Boolean(process.env.DRY_RUN),
+    dryRun: parseFlag('DRY_RUN', process.env.DRY_RUN),
     policy: {
       keepBuilds: positiveInteger('KEEP_BUILDS', 3),
       keepDays: positiveInteger('KEEP_DAYS', 7),
@@ -59,6 +71,6 @@ const readSmokeConfig = (): SmokeConfig => ({
   siteUrl: required('SITE_URL').replace(/\/$/, ''),
 });
 
-export { readDeployConfig, readSmokeConfig };
+export { parseFlag, readDeployConfig, readSmokeConfig };
 
 export type { DeployConfig, SmokeConfig };

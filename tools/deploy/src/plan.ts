@@ -41,6 +41,11 @@ type PrunePolicy = {
   keepDays: number;
 };
 
+type StoredObject = {
+  key: string;
+  lastModified: Date;
+};
+
 type KeptBuilds
   = | { skip: true; reason: string }
     | { skip: false; ids: string[] };
@@ -54,7 +59,10 @@ const shouldUpload = (key: string): boolean => !JUNK_FILES.has(key.slice(key.las
 
 const recordKey = (buildId: string): string => `${RECORD_PREFIX}${buildId}.txt`;
 
-const buildIdFromRecordKey = (key: string): string => key.slice(RECORD_PREFIX.length).replace(/\.txt$/, '');
+// Anything else under _deploys/ (a console folder marker, a README) is not a build record
+const RECORD_KEY_PATTERN = /^_deploys\/(\d{8}T\d{6}Z(?:-[0-9a-f]{7})?)\.txt$/;
+
+const buildIdFromRecordKey = (key: string): string | undefined => RECORD_KEY_PATTERN.exec(key)?.[1];
 
 // Build IDs start with a compact UTC timestamp (20260926T235452Z) so they sort chronologically as strings
 const createBuildId = (now: Date, sha?: string): string => {
@@ -105,19 +113,32 @@ const selectKeptBuilds = (buildIds: string[], now: Date, policy: PrunePolicy): K
   return { skip: false, ids: kept };
 };
 
-const assetsToDelete = (remoteKeys: string[], keptAssets: ReadonlySet<string>): string[] =>
-  remoteKeys.filter(key => isAsset(key) && !keptAssets.has(key));
+// Assets no kept build references. Anything uploaded within `graceMs` is left alone regardless: it may belong
+// to a deploy that's still in progress and hasn't written its record yet.
+const assetsToDelete = (
+  remote: StoredObject[],
+  keptAssets: ReadonlySet<string>,
+  now: Date,
+  graceMs: number,
+): string[] =>
+  remote
+    .filter(({ key, lastModified }) =>
+      isAsset(key) && !keptAssets.has(key) && now.getTime() - lastModified.getTime() >= graceMs)
+    .map(({ key }) => key);
 
-// Root files (index.html, public/ files) that are no longer in the build. Assets and build records are
-// managed by pruning, never here.
-const staleRootKeys = (remoteKeys: string[], localKeys: ReadonlySet<string>): string[] =>
-  remoteKeys.filter(key => !isAsset(key) && !key.startsWith(RECORD_PREFIX) && !localKeys.has(key));
+// Root files (index.html, public/ files) the previous deploy uploaded that aren't in this build. Only files a
+// deploy recorded are ever candidates, so anything placed in the bucket by hand is never deleted.
+const staleRootKeys = (previousRecord: string[], currentRootKeys: ReadonlySet<string>): string[] =>
+  previousRecord.filter(key => !isAsset(key) && !key.startsWith(RECORD_PREFIX) && !currentRootKeys.has(key));
 
 const parseRecord = (text: string): string[] => text.split('\n').map(line => line.trim()).filter(Boolean);
 
-const formatRecord = (assetKeys: string[]): string => `${assetKeys.toSorted().join('\n')}\n`;
+// A record lists every key its deploy uploaded (assets and root files). Records written before root files were
+// included list assets only, which simply means nothing at the root is treated as stale.
+const formatRecord = (keys: string[]): string => `${keys.toSorted().join('\n')}\n`;
 
 export {
+  ASSET_PREFIX,
   assetsToDelete,
   buildIdFromRecordKey,
   cacheControlFor,
@@ -134,4 +155,4 @@ export {
   staleRootKeys,
 };
 
-export type { KeptBuilds, PrunePolicy };
+export type { KeptBuilds, PrunePolicy, StoredObject };
