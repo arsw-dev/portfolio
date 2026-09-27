@@ -14,7 +14,7 @@ variable "github_repo" {
 }
 
 variable "state_keys" {
-  description = "State file keys in the state bucket that the plan role may read and lock, one per Terraform root (e.g. site/terraform.tfstate)"
+  description = "State file keys in the state bucket that the plan role may read, one per Terraform root (e.g. site/terraform.tfstate)"
   type        = list(string)
 
   validation {

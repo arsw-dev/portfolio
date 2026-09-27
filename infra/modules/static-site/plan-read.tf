@@ -15,9 +15,10 @@ resource "aws_iam_role_policy" "plan_read" {
         {
           # Bucket-level reads only (the bucket ARN, not its objects). s3:Get* rather than a list so new provider
           # versions reading new bucket settings keep working; it can't read any file.
-          Sid      = "ReadBucketConfiguration"
-          Effect   = "Allow"
-          Action   = ["s3:ListBucket", "s3:Get*"]
+          Sid    = "ReadBucketConfiguration"
+          Effect = "Allow"
+          # ListTagsForResource: provider 6.x reads bucket tags through it first (S3 Control), falling back otherwise
+          Action   = ["s3:ListBucket", "s3:Get*", "s3:ListTagsForResource"]
           Resource = aws_s3_bucket.this.arn
         },
         {

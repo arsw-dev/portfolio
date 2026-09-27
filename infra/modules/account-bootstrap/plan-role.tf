@@ -1,5 +1,6 @@
 # Read-only role for `terraform plan` on pull requests. It can read state and the resources Terraform manages,
-# and write only its roots' lock files. It cannot change anything.
+# and write nothing: CI plans run with -lock=false (a plan changes nothing, and the apply re-plans under a lock),
+# so PR code can't clear or plant the lock that protects applies.
 
 resource "aws_iam_role" "plan" {
   name = "${var.name}-terraform-plan"
@@ -42,20 +43,11 @@ resource "aws_iam_role_policy" "plan" {
         Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}"]
       },
       {
-        # Plans take the lock; only these exact lock files, so a PR can't clear or plant another root's lock.
-        # GetObject because releasing reads the lock back to check its ID before deleting it. (Not visible in
-        # CloudTrail's event history, which omits S3 object-level calls.)
-        Sid      = "StateLock"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}.tflock"]
-      },
-      {
         # Bucket-level reads only (the bucket ARN, not its objects), for refreshing the state bucket's settings.
         # s3:Get* rather than a list so new provider versions reading new settings keep working.
         Sid      = "ReadStateBucketConfiguration"
         Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:Get*"]
+        Action   = ["s3:ListBucket", "s3:Get*", "s3:ListTagsForResource"]
         Resource = aws_s3_bucket.state.arn
       },
       {

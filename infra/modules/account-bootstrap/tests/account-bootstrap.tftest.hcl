@@ -112,37 +112,26 @@ run "plan_role_trusts_only_pull_requests" {
   }
 }
 
-run "plan_role_cannot_change_anything_but_its_own_lock_files" {
+run "plan_role_cannot_write_anything" {
   command = apply
 
-  # Every Allow is a read, except the exact lock files
+  # CI plans run with -lock=false, so the role needs no write at all, not even a lock file
   assert {
     condition = alltrue(flatten([
       for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : [
         for action in flatten([statement.Action]) :
         can(regex("^[a-z0-9-]+:(Get|List|Describe)", action))
-      ] if statement.Sid != "StateLock"
+      ]
     ]))
     error_message = "The plan role gained a write permission."
   }
 
   assert {
-    condition = anytrue([
-      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
-      statement.Sid == "StateLock" && toset(statement.Resource) == toset([
-        "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate.tflock",
-        "arn:aws:s3:::acme-tfstate/site/terraform.tfstate.tflock",
-      ])
+    condition = !anytrue([
+      for resource in flatten([for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : statement.Resource]) :
+      endswith(resource, ".tflock")
     ])
-    error_message = "Lock writes should be limited to the exact lock files of the listed state keys."
-  }
-
-  assert {
-    condition = anytrue([
-      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
-      statement.Sid == "StateLock" && toset(statement.Action) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"])
-    ])
-    error_message = "Taking and releasing a lock needs put, get (release checks the lock ID) and delete on the lock file."
+    error_message = "The plan role shouldn't reach lock files: PR code could clear or plant the lock that protects applies."
   }
 
   assert {
@@ -174,8 +163,6 @@ run "plan_role_reaches_nothing_outside_this_module" {
       "arn:aws:s3:::acme-tfstate",
       "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate",
       "arn:aws:s3:::acme-tfstate/site/terraform.tfstate",
-      "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate.tflock",
-      "arn:aws:s3:::acme-tfstate/site/terraform.tfstate.tflock",
       "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
       aws_iam_role.plan.arn,
     ])
