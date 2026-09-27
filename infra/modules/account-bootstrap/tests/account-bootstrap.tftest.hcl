@@ -9,12 +9,17 @@ mock_provider "aws" {
   mock_resource "aws_s3_bucket" {
     defaults = { arn = "arn:aws:s3:::acme-tfstate" }
   }
+
+  mock_resource "aws_iam_role" {
+    defaults = { arn = "arn:aws:iam::123456789012:role/acme-terraform-plan" }
+  }
 }
 
 variables {
   name              = "acme"
   state_bucket_name = "acme-tfstate"
   github_repo       = "acme-co/site"
+  state_keys        = ["bootstrap/terraform.tfstate", "site/terraform.tfstate"]
 }
 
 run "state_bucket_is_versioned_encrypted_and_private" {
@@ -107,16 +112,16 @@ run "plan_role_trusts_only_pull_requests" {
   }
 }
 
-run "plan_role_cannot_change_anything_but_the_lock_file" {
+run "plan_role_cannot_change_anything_but_its_own_lock_files" {
   command = apply
 
-  # Every Allow statement other than StateLock is read-only (or TestFunction, which only executes code)
+  # Every Allow is a read, except the exact lock files
   assert {
     condition = alltrue(flatten([
       for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : [
         for action in flatten([statement.Action]) :
-        can(regex("^[a-z0-9-]+:(Get|List|Describe)", action)) || action == "cloudfront:TestFunction"
-      ] if statement.Effect == "Allow" && statement.Sid != "StateLock"
+        can(regex("^[a-z0-9-]+:(Get|List|Describe)", action))
+      ] if statement.Sid != "StateLock"
     ]))
     error_message = "The plan role gained a write permission."
   }
@@ -124,18 +129,73 @@ run "plan_role_cannot_change_anything_but_the_lock_file" {
   assert {
     condition = anytrue([
       for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
-      statement.Sid == "StateLock" && statement.Resource == "arn:aws:s3:::acme-tfstate/*.tflock"
+      statement.Sid == "StateLock" && toset(statement.Resource) == toset([
+        "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate.tflock",
+        "arn:aws:s3:::acme-tfstate/site/terraform.tfstate.tflock",
+      ])
     ])
-    error_message = "State writes should be limited to lock files."
+    error_message = "Lock writes should be limited to the exact lock files of the listed state keys."
   }
 
   assert {
     condition = anytrue([
       for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
-      statement.Effect == "Deny" && statement.Action == "s3:GetObject*" && statement.NotResource == "arn:aws:s3:::acme-tfstate/*"
+      statement.Sid == "StateLock" && toset(statement.Action) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"])
     ])
-    error_message = "Object reads outside the state bucket should be denied."
+    error_message = "Taking and releasing a lock needs put, get (release checks the lock ID) and delete on the lock file."
   }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
+      statement.Sid == "ReadState" && toset(statement.Resource) == toset([
+        "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate",
+        "arn:aws:s3:::acme-tfstate/site/terraform.tfstate",
+      ])
+    ])
+    error_message = "State reads should be limited to the listed state keys."
+  }
+}
+
+run "plan_role_reaches_nothing_outside_this_module" {
+  command = apply
+
+  assert {
+    condition = alltrue(flatten([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : [
+        for resource in flatten([statement.Resource]) : !strcontains(resource, "*")
+      ]
+    ]))
+    error_message = "Every plan role permission should name exact resources; site resources are granted by each site."
+  }
+
+  assert {
+    condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : statement.Resource])) == toset([
+      "arn:aws:s3:::acme-tfstate",
+      "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate",
+      "arn:aws:s3:::acme-tfstate/site/terraform.tfstate",
+      "arn:aws:s3:::acme-tfstate/bootstrap/terraform.tfstate.tflock",
+      "arn:aws:s3:::acme-tfstate/site/terraform.tfstate.tflock",
+      "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
+      aws_iam_role.plan.arn,
+    ])
+    error_message = "The base policy should cover only state, the state bucket, the OIDC provider and this role."
+  }
+
+  assert {
+    condition     = output.plan_role_name == "acme-terraform-plan"
+    error_message = "plan_role_name should be output for sites to grant read access."
+  }
+}
+
+run "state_keys_must_be_exact" {
+  command = plan
+
+  variables {
+    state_keys = ["*"]
+  }
+
+  expect_failures = [var.state_keys]
 }
 
 run "old_state_versions_expire_but_recent_history_is_kept" {

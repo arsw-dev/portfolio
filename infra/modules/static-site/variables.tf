@@ -65,6 +65,12 @@ variable "github_repo" {
   type        = string
 }
 
+variable "plan_role_name" {
+  description = "Name of the account's Terraform plan role (account-bootstrap's plan_role_name output). When set, this site grants it read access to its own resources so pull-request plans work. Null skips the grant"
+  type        = string
+  default     = null
+}
+
 variable "github_environment" {
   description = "GitHub environment whose jobs may assume the deploy role"
   type        = string

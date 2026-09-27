@@ -1,5 +1,5 @@
-# Read-only role for `terraform plan` on pull requests. It can read infrastructure and state,
-# and write only the state lock file. It cannot change anything.
+# Read-only role for `terraform plan` on pull requests. It can read state and the resources Terraform manages,
+# and write only its roots' lock files. It cannot change anything.
 
 resource "aws_iam_role" "plan" {
   name = "${var.name}-terraform-plan"
@@ -29,56 +29,47 @@ resource "aws_iam_role_policy" "plan" {
   name = "${var.name}-terraform-plan"
   role = aws_iam_role.plan.id
 
+  # Only what this module manages: the state files it's told about, the state bucket's configuration, the GitHub
+  # OIDC provider and this role. Each site grants read on its own resources (static-site's plan_role_name), so
+  # nothing here reaches the rest of the account. Actions match what plans were observed calling (CloudTrail).
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Sid      = "ReadState"
         Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetObject"]
-        Resource = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+        Action   = "s3:GetObject"
+        Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}"]
       },
       {
+        # Plans take the lock; only these exact lock files, so a PR can't clear or plant another root's lock.
+        # GetObject because releasing reads the lock back to check its ID before deleting it. (Not visible in
+        # CloudTrail's event history, which omits S3 object-level calls.)
         Sid      = "StateLock"
         Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:DeleteObject"]
-        Resource = "${aws_s3_bucket.state.arn}/*.tflock"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = [for key in var.state_keys : "${aws_s3_bucket.state.arn}/${key}.tflock"]
       },
       {
-        Sid    = "ReadInfrastructure"
-        Effect = "Allow"
-        Action = [
-          "acm:Describe*",
-          "acm:List*",
-          "cloudfront:Describe*",
-          "cloudfront:Get*",
-          "cloudfront:List*",
-          "iam:GetOpenIDConnectProvider",
-          "iam:GetPolicy",
-          "iam:GetPolicyVersion",
-          "iam:GetRole",
-          "iam:GetRolePolicy",
-          "iam:ListAttachedRolePolicies",
-          "iam:ListInstanceProfilesForRole",
-          "iam:ListRolePolicies",
-          "s3:Get*",
-          "s3:List*",
-        ]
-        Resource = "*"
-      },
-      {
-        # Runs a CloudFront Function against a sample event (functions/test-live.sh). Executes code, changes nothing
-        Sid      = "TestCloudFrontFunctions"
+        # Bucket-level reads only (the bucket ARN, not its objects), for refreshing the state bucket's settings.
+        # s3:Get* rather than a list so new provider versions reading new settings keep working.
+        Sid      = "ReadStateBucketConfiguration"
         Effect   = "Allow"
-        Action   = "cloudfront:TestFunction"
-        Resource = "*"
+        Action   = ["s3:ListBucket", "s3:Get*"]
+        Resource = aws_s3_bucket.state.arn
       },
       {
-        # s3:Get* above is for bucket configuration. Don't let it read object contents anywhere but the state bucket
-        Sid         = "DenyObjectReadsOutsideState"
-        Effect      = "Deny"
-        Action      = "s3:GetObject*"
-        NotResource = "${aws_s3_bucket.state.arn}/*"
+        Sid      = "ReadGitHubOidcProvider"
+        Effect   = "Allow"
+        Action   = "iam:GetOpenIDConnectProvider"
+        Resource = local.github_oidc_provider_arn
+      },
+      {
+        # This role and its inline policies, including the per-site grants
+        Sid      = "ReadThisRole"
+        Effect   = "Allow"
+        Action   = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies"]
+        Resource = aws_iam_role.plan.arn
       },
     ]
   })

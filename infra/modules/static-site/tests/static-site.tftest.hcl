@@ -487,3 +487,71 @@ run "tags_merge_with_builtins_winning" {
     error_message = "Taggable resources should share the same tags."
   }
 }
+
+run "no_plan_role_grant_unless_asked" {
+  command = apply
+
+  assert {
+    condition     = length(aws_iam_role_policy.plan_read) == 0
+    error_message = "Without plan_role_name the module shouldn't touch any other role."
+  }
+}
+
+run "plan_role_can_read_exactly_this_sites_resources" {
+  command = apply
+
+  variables {
+    plan_role_name = "acme-terraform-plan"
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.plan_read[0].role == "acme-terraform-plan"
+    error_message = "The grant should be attached to the named plan role."
+  }
+
+  assert {
+    condition = toset(flatten([for statement in jsondecode(aws_iam_role_policy.plan_read[0].policy).Statement : statement.Resource])) == toset([
+      aws_s3_bucket.this.arn,
+      aws_cloudfront_distribution.this.arn,
+      aws_cloudfront_function.viewer_request.arn,
+      aws_cloudfront_origin_access_control.this.arn,
+      aws_iam_role.deploy.arn,
+      aws_acm_certificate.this[0].arn,
+    ])
+    error_message = "The grant should cover this site's bucket, distribution, function, OAC, deploy role and certificate, and nothing else."
+  }
+
+  assert {
+    # The bucket ARN, never bucket/*: bucket settings are readable, file contents aren't
+    condition = alltrue(flatten([
+      for statement in jsondecode(aws_iam_role_policy.plan_read[0].policy).Statement : [
+        for resource in flatten([statement.Resource]) : !strcontains(resource, "*")
+      ]
+    ]))
+    error_message = "No grant should use a wildcard resource (including bucket/*)."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for statement in jsondecode(aws_iam_role_policy.plan_read[0].policy).Statement : [
+        for action in flatten([statement.Action]) :
+        can(regex("^[a-z0-9-]+:(Get|List|Describe)", action)) || action == "cloudfront:TestFunction"
+      ]
+    ]))
+    error_message = "The grant should be read-only (plus TestFunction, which executes and changes nothing)."
+  }
+}
+
+run "plan_role_grant_in_preview_mode_has_no_certificate" {
+  command = apply
+
+  variables {
+    plan_role_name = "acme-terraform-plan"
+    domains        = []
+  }
+
+  assert {
+    condition     = !anytrue([for statement in jsondecode(aws_iam_role_policy.plan_read[0].policy).Statement : statement.Sid == "ReadCertificate"])
+    error_message = "Without domains there's no certificate to grant read on."
+  }
+}

@@ -12,3 +12,8 @@ output "plan_role_arn" {
   description = "Role assumed by the Terraform plan workflow on pull requests"
   value       = aws_iam_role.plan.arn
 }
+
+output "plan_role_name" {
+  description = "Plan role name, for static-site's plan_role_name so each site grants it read on its own resources"
+  value       = aws_iam_role.plan.name
+}
