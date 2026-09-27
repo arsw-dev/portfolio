@@ -54,6 +54,13 @@ describe('record keys', () => {
     const id = '20260926T235452Z-abc1234';
     assert.equal(recordKey(id), '_deploys/20260926T235452Z-abc1234.txt');
     assert.equal(buildIdFromRecordKey(recordKey(id)), id);
+    assert.equal(buildIdFromRecordKey(recordKey('20260926T235452Z')), '20260926T235452Z');
+  });
+
+  it('rejects anything under _deploys/ that is not a build record', () => {
+    for (const key of ['_deploys/', '_deploys/README.md', '_deploys/latest.txt', '_deploys/20260926T235452Z-ABC1234.txt', 'assets/20260926T235452Z.txt']) {
+      assert.equal(buildIdFromRecordKey(key), undefined, key);
+    }
   });
 
   it('formats records sorted, one key per line, and parses them back ignoring blanks', () => {
@@ -167,26 +174,46 @@ describe('selectKeptBuilds', () => {
 });
 
 describe('assetsToDelete', () => {
+  const GRACE_MS = HOUR_MS;
+  const old = (key: string) => ({ key, lastModified: new Date(NOW.getTime() - 30 * 24 * HOUR_MS) });
+
   it('deletes assets no kept build references, including pre-record leftovers', () => {
-    const remote = ['assets/a1.js', 'assets/shared.js', 'assets/b1.js', 'assets/legacy.js'];
+    const remote = ['assets/a1.js', 'assets/shared.js', 'assets/b1.js', 'assets/legacy.js'].map(old);
     const kept = new Set(['assets/shared.js', 'assets/b1.js']);
-    assert.deepEqual(assetsToDelete(remote, kept), ['assets/a1.js', 'assets/legacy.js']);
+    assert.deepEqual(assetsToDelete(remote, kept, NOW, GRACE_MS), ['assets/a1.js', 'assets/legacy.js']);
   });
 
   it('never touches files outside assets/', () => {
-    const remote = ['index.html', '_deploys/20260101T000000Z.txt', 'favicon.svg'];
-    assert.deepEqual(assetsToDelete(remote, new Set()), []);
+    const remote = ['index.html', '_deploys/20260101T000000Z.txt', 'favicon.svg'].map(old);
+    assert.deepEqual(assetsToDelete(remote, new Set(), NOW, GRACE_MS), []);
+  });
+
+  it('leaves recently uploaded assets alone even when unreferenced (an in-flight deploy)', () => {
+    const remote = [
+      { key: 'assets/in-flight.js', lastModified: new Date(NOW.getTime() - 5 * 60 * 1000) },
+      { key: 'assets/just-over.js', lastModified: new Date(NOW.getTime() - GRACE_MS) },
+    ];
+    assert.deepEqual(assetsToDelete(remote, new Set(), NOW, GRACE_MS), ['assets/just-over.js']);
   });
 });
 
 describe('staleRootKeys', () => {
-  it('finds root files that are no longer in the build', () => {
-    const remote = ['index.html', 'old-logo.svg', 'robots.txt'];
-    assert.deepEqual(staleRootKeys(remote, new Set(['index.html', 'robots.txt'])), ['old-logo.svg']);
+  it('finds root files the previous deploy uploaded that this build dropped', () => {
+    const previous = ['assets/a.js', 'index.html', 'old-logo.svg', 'robots.txt'];
+    assert.deepEqual(staleRootKeys(previous, new Set(['index.html', 'robots.txt'])), ['old-logo.svg']);
+  });
+
+  it('never considers files no deploy recorded (hand-placed files survive)', () => {
+    // google123.html exists in the bucket but isn't in any record, so it can't be a candidate
+    assert.deepEqual(staleRootKeys(['index.html'], new Set(['index.html'])), []);
+  });
+
+  it('treats an asset-only record from before root files were recorded as having no root files', () => {
+    assert.deepEqual(staleRootKeys(['assets/a.js', 'assets/b.css'], new Set(['index.html'])), []);
   });
 
   it('leaves assets and build records to pruning', () => {
-    const remote = ['assets/old.js', '_deploys/20260101T000000Z.txt', 'index.html'];
-    assert.deepEqual(staleRootKeys(remote, new Set(['index.html'])), []);
+    const previous = ['assets/old.js', '_deploys/20260101T000000Z.txt', 'index.html'];
+    assert.deepEqual(staleRootKeys(previous, new Set(['index.html'])), []);
   });
 });
