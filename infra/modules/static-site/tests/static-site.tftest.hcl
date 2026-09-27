@@ -249,7 +249,6 @@ run "deploy_role_is_scoped_to_this_site" {
       "s3:PutObject",
       "s3:DeleteObject",
       "cloudfront:CreateInvalidation",
-      "cloudfront:GetInvalidation",
     ])
     error_message = "Deploy actions changed; update this test deliberately if that's intended."
   }

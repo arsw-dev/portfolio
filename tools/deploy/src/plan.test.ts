@@ -89,6 +89,18 @@ describe('cacheControlFor', () => {
     assert.equal(cacheControlFor('assets/index-BaXPYhR1.js'), 'public, max-age=31536000, immutable');
   });
 
+  it('recognises every hash shape Vite produced for this site, including ones containing - and _', () => {
+    for (const key of ['assets/_slug-1YTApo-9.js', 'assets/posts-BIE8_9J4.js', 'assets/index-rs8v4u0x.css', 'assets/building-a-global-mapbox-singleton-in-react-Cjxz55MH.js']) {
+      assert.equal(cacheControlFor(key), 'public, max-age=31536000, immutable', key);
+    }
+  });
+
+  it('revalidates unhashed files under assets/ (copied from public/assets/)', () => {
+    for (const key of ['assets/logo.png', 'assets/logo-dark.png', 'assets/icon-download.svg', 'assets/logo-facebook.png', 'assets/font-Regular.woff2']) {
+      assert.equal(cacheControlFor(key), 'no-cache', key);
+    }
+  });
+
   it('revalidates everything else', () => {
     for (const key of ['index.html', 'favicon.svg', 'robots.txt', 'nested/assets/file.js']) {
       assert.equal(cacheControlFor(key), 'no-cache', key);
@@ -104,6 +116,19 @@ describe('contentTypeFor', () => {
     assert.equal(contentTypeFor('favicon.svg'), 'image/svg+xml');
     assert.equal(contentTypeFor('manifest.json'), 'application/json');
     assert.equal(contentTypeFor('assets/font-a1.woff2'), 'font/woff2');
+  });
+
+  it('serves media and data files with real types so nosniff browsers accept them', () => {
+    assert.equal(contentTypeFor('captions/en.vtt'), 'text/vtt; charset=utf-8');
+    assert.equal(contentTypeFor('audio/intro.mp3'), 'audio/mpeg');
+    assert.equal(contentTypeFor('data/prices.csv'), 'text/csv; charset=utf-8');
+    assert.equal(contentTypeFor('legacy.htm'), 'text/html; charset=utf-8');
+    assert.equal(contentTypeFor('models/chair.glb'), 'model/gltf-binary');
+  });
+
+  it('types extensionless well-known files by name', () => {
+    assert.equal(contentTypeFor('.well-known/apple-app-site-association'), 'application/json');
+    assert.equal(contentTypeFor('.well-known/assetlinks.json'), 'application/json');
   });
 
   it('ignores extension case', () => {

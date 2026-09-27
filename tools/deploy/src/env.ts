@@ -13,6 +13,7 @@ type DeployConfig = {
 
 type SmokeConfig = {
   siteUrl: string;
+  distDir: string;
 };
 
 const required = (name: string): string => {
@@ -67,9 +68,13 @@ const readDeployConfig = (): DeployConfig => {
   };
 };
 
-const readSmokeConfig = (): SmokeConfig => ({
-  siteUrl: required('SITE_URL').replace(/\/$/, ''),
-});
+const readSmokeConfig = (): SmokeConfig => {
+  const distDir = process.argv[2];
+  if (!distDir) {
+    throw new Error('usage: smoke.ts <dist dir>');
+  }
+  return { siteUrl: required('SITE_URL').replace(/\/$/, ''), distDir };
+};
 
 export { parseFlag, readDeployConfig, readSmokeConfig };
 

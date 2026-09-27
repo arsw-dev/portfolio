@@ -8,33 +8,66 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 const REVALIDATE = 'no-cache';
 
+// With nosniff (from the security headers policy) browsers trust Content-Type, so a wrong or generic type
+// breaks the file (e.g. <track> refuses captions that aren't text/vtt)
 const CONTENT_TYPES: Record<string, string> = {
+  aac: 'audio/aac',
+  atom: 'application/atom+xml',
   avif: 'image/avif',
+  csv: 'text/csv; charset=utf-8',
   css: 'text/css; charset=utf-8',
+  flac: 'audio/flac',
   gif: 'image/gif',
+  glb: 'model/gltf-binary',
+  gltf: 'model/gltf+json',
+  htm: 'text/html; charset=utf-8',
   html: 'text/html; charset=utf-8',
   ico: 'image/x-icon',
+  ics: 'text/calendar; charset=utf-8',
   jpeg: 'image/jpeg',
   jpg: 'image/jpeg',
   js: 'text/javascript; charset=utf-8',
   json: 'application/json',
+  jsonld: 'application/ld+json',
+  m4a: 'audio/mp4',
   map: 'application/json',
+  md: 'text/markdown; charset=utf-8',
   mjs: 'text/javascript; charset=utf-8',
+  mov: 'video/quicktime',
+  mp3: 'audio/mpeg',
   mp4: 'video/mp4',
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  ogv: 'video/ogg',
+  opus: 'audio/opus',
   otf: 'font/otf',
   pdf: 'application/pdf',
   png: 'image/png',
+  rss: 'application/rss+xml',
   svg: 'image/svg+xml',
   ttf: 'font/ttf',
   txt: 'text/plain; charset=utf-8',
+  vtt: 'text/vtt; charset=utf-8',
   wasm: 'application/wasm',
+  wav: 'audio/wav',
   webm: 'video/webm',
   webmanifest: 'application/manifest+json',
   webp: 'image/webp',
   woff: 'font/woff',
   woff2: 'font/woff2',
   xml: 'application/xml',
+  zip: 'application/zip',
 };
+
+// Well-known files with no extension, matched by name
+const CONTENT_TYPES_BY_NAME: Record<string, string> = {
+  'apple-app-site-association': 'application/json',
+};
+
+// Vite names hashed files <name>-<8 base64url chars>.<ext>. Requiring a digit, uppercase letter, _ or - in the
+// hash keeps names like icon-download.svg (an 8-letter word) from being cached forever; the rare all-lowercase
+// real hash just gets no-cache, which is the safe way to be wrong.
+const HASHED_NAME_PATTERN = /-(?=[\w-]{0,7}[A-Z0-9_-])[\w-]{8}\.[A-Za-z0-9]+$/;
 
 type PrunePolicy = {
   keepBuilds: number;
@@ -79,10 +112,18 @@ const parseBuildTime = (buildId: string): Date => {
   return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
 };
 
-const cacheControlFor = (key: string): string => (isAsset(key) ? IMMUTABLE : REVALIDATE);
+// Only content-hashed build output is safe to cache forever. Unhashed files under assets/ (copied from
+// public/assets/) keep their name when their content changes, so they must revalidate.
+const isHashedAsset = (key: string): boolean => isAsset(key) && HASHED_NAME_PATTERN.test(key);
+
+const cacheControlFor = (key: string): string => (isHashedAsset(key) ? IMMUTABLE : REVALIDATE);
 
 const contentTypeFor = (key: string): string => {
   const name = key.slice(key.lastIndexOf('/') + 1);
+  const byName = CONTENT_TYPES_BY_NAME[name];
+  if (byName) {
+    return byName;
+  }
   const dot = name.lastIndexOf('.');
   const extension = dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
   return CONTENT_TYPES[extension] ?? 'application/octet-stream';
@@ -146,6 +187,7 @@ export {
   createBuildId,
   formatRecord,
   isAsset,
+  isHashedAsset,
   parseBuildTime,
   parseRecord,
   RECORD_PREFIX,

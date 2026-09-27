@@ -8,7 +8,7 @@
 //    succeed, so a failed deploy never counts as a build that went live.
 // 4. Root files the previous record lists but this build doesn't are deleted. Files nobody deployed are never
 //    touched.
-// 5. CloudFront is invalidated.
+// 5. CloudFront is invalidated (not waited on; see aws.ts).
 // 6. Old assets are pruned (see selectKeptBuilds and assetsToDelete in plan.ts).
 
 import type { PrunePolicy, StoredObject } from './plan.ts';

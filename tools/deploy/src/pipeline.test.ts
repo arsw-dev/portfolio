@@ -103,8 +103,9 @@ const setup = () => {
   return { clock, bucket, cdn, logs, run };
 };
 
+// Asset names follow Vite's <name>-<8 char hash>.<ext> shape so they're treated as hashed
 const siteBuild = (tag: string, extra: string[] = []): string[] =>
-  ['index.html', 'favicon.svg', `assets/index-${tag}.js`, `assets/index-${tag}.css`, ...extra];
+  ['index.html', 'favicon.svg', `assets/index-${tag}Xy12ab.js`, `assets/index-${tag}Xy12ab.css`, ...extra];
 
 describe('deploy pipeline', () => {
   it('uploads every file with the right headers, records it, and invalidates', async () => {
@@ -114,8 +115,8 @@ describe('deploy pipeline', () => {
 
     assert.equal(bucket.objects.get('index.html')?.cacheControl, 'no-cache');
     assert.equal(bucket.objects.get('index.html')?.contentType, 'text/html; charset=utf-8');
-    assert.equal(bucket.objects.get('assets/index-a1.js')?.cacheControl, 'public, max-age=31536000, immutable');
-    assert.equal(bucket.objects.get('assets/index-a1.js')?.contentType, 'text/javascript; charset=utf-8');
+    assert.equal(bucket.objects.get('assets/index-a1Xy12ab.js')?.cacheControl, 'public, max-age=31536000, immutable');
+    assert.equal(bucket.objects.get('assets/index-a1Xy12ab.js')?.contentType, 'text/javascript; charset=utf-8');
 
     const record = await bucket.store.getText(`_deploys/${result.buildId}.txt`);
     assert.deepEqual(record.trim().split('\n'), siteBuild('a1').toSorted());
@@ -172,17 +173,17 @@ describe('deploy pipeline', () => {
 
   it('prunes an old build once it is outside the last 3 and was replaced over 7 days ago, keeping shared assets', async () => {
     const { bucket, clock, run } = setup();
-    await run(siteBuild('a1', ['assets/vendor-shared.js']));
+    await run(siteBuild('a1', ['assets/vendor-Sh4red00.js']));
     for (const tag of ['b2', 'c3']) {
       clock.advance(30 * DAY_MS);
-      await run(siteBuild(tag, ['assets/vendor-shared.js']));
+      await run(siteBuild(tag, ['assets/vendor-Sh4red00.js']));
     }
     clock.advance(30 * DAY_MS);
 
     const result = await run(siteBuild('d4'));
 
-    assert.deepEqual(result.pruned.toSorted(), ['assets/index-a1.css', 'assets/index-a1.js']);
-    for (const key of ['assets/vendor-shared.js', 'assets/index-b2.js', 'assets/index-c3.js', 'assets/index-d4.js']) {
+    assert.deepEqual(result.pruned.toSorted(), ['assets/index-a1Xy12ab.css', 'assets/index-a1Xy12ab.js']);
+    for (const key of ['assets/vendor-Sh4red00.js', 'assets/index-b2Xy12ab.js', 'assets/index-c3Xy12ab.js', 'assets/index-d4Xy12ab.js']) {
       assert.equal(bucket.objects.has(key), true, key);
     }
   });
@@ -196,7 +197,7 @@ describe('deploy pipeline', () => {
       await run(siteBuild(tag));
     }
 
-    assert.equal(bucket.objects.has('assets/index-a1.js'), true);
+    assert.equal(bucket.objects.has('assets/index-a1Xy12ab.js'), true);
   });
 
   it('never prunes the build that just went live, even with no upload grace period', async () => {
@@ -258,7 +259,7 @@ describe('deploy pipeline', () => {
   it('refuses a build without index.html', async () => {
     const { bucket, run } = setup();
 
-    await assert.rejects(run(['assets/index-a1.js']), /index.html not found/);
+    await assert.rejects(run(['assets/index-a1Xy12ab.js']), /index.html not found/);
     assert.equal(bucket.objects.size, 0);
   });
 });

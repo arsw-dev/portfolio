@@ -1,12 +1,33 @@
-// Checks a deployed site: home page headers, the SPA fallback for deep links, and asset caching.
+// Checks a deployed site against the build that was just deployed: the live index.html is this build's, every
+// asset it references is served with the right cache and content type, .well-known files are served as-is,
+// security headers are present, and deep links reach the SPA shell.
 //
-//   SITE_URL=https://arsw.dev node tools/deploy/src/smoke.ts
+//   SITE_URL=https://arsw.dev node tools/deploy/src/smoke.ts site/dist
 
 import type { ResponseSnapshot } from './smoke-checks.ts';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { readSmokeConfig } from './env.ts';
-import { checkAsset, checkDeepLink, checkHomePage, DEEP_LINK_PATH, findAssetPath } from './smoke-checks.ts';
+import { listLocalFiles } from './files.ts';
+import {
+  checkDeepLink,
+  checkFile,
+  checkFileBody,
+  checkHomePage,
+  checkServedIndex,
+  DEEP_LINK_PATH,
+  findAssetPaths,
+} from './smoke-checks.ts';
 
-const request = async (url: string): Promise<{ snapshot: ResponseSnapshot; body: string }> => {
+// The deploy doesn't wait for its invalidation, and the edge may hold index.html for CachingOptimized's 1s
+// minimum TTL, so give the new index.html up to a minute to appear
+const INDEX_ATTEMPTS = 12;
+const INDEX_RETRY_MS = 5000;
+
+type Fetched = { snapshot: ResponseSnapshot; body: string };
+
+const request = async (url: string): Promise<Fetched> => {
   const response = await fetch(url, { redirect: 'manual' });
   return {
     snapshot: { status: response.status, header: name => response.headers.get(name) },
@@ -14,7 +35,7 @@ const request = async (url: string): Promise<{ snapshot: ResponseSnapshot; body:
   };
 };
 
-const { siteUrl } = readSmokeConfig();
+const { siteUrl, distDir } = readSmokeConfig();
 const failures: string[] = [];
 
 const run = (name: string, results: string[]): void => {
@@ -23,19 +44,34 @@ const run = (name: string, results: string[]): void => {
   failures.push(...results.map(result => `${name}: ${result}`));
 };
 
-const home = await request(`${siteUrl}/`);
-run('home page', checkHomePage(home.snapshot));
+const localIndex = await readFile(join(distDir, 'index.html'), 'utf8');
+
+let home = await request(`${siteUrl}/`);
+for (let attempt = 1; attempt < INDEX_ATTEMPTS && home.body !== localIndex; attempt++) {
+  console.log(`      waiting for the new index.html (attempt ${attempt} of ${INDEX_ATTEMPTS - 1})`);
+  await sleep(INDEX_RETRY_MS);
+  home = await request(`${siteUrl}/`);
+}
+
+run('home page is this build', checkServedIndex(home.body, localIndex));
+run('home page headers', checkHomePage(home.snapshot));
 
 const deepLink = await request(`${siteUrl}${DEEP_LINK_PATH}`);
 run('deep link', checkDeepLink(deepLink.snapshot));
 
-const assetPath = findAssetPath(home.body);
-if (assetPath) {
-  const asset = await request(`${siteUrl}${assetPath}`);
-  run(`asset ${assetPath}`, checkAsset(asset.snapshot));
+const assetPaths = findAssetPaths(home.body);
+if (assetPaths.length === 0) {
+  run('assets', ['no /assets/ reference found in the home page']);
 }
-else {
-  run('asset', ['no /assets/ reference found in the home page']);
+for (const path of assetPaths) {
+  const asset = await request(`${siteUrl}${path}`);
+  run(`asset ${path}`, checkFile(path.slice(1), asset.snapshot));
+}
+
+for (const key of (await listLocalFiles(distDir)).filter(key => key.startsWith('.well-known/'))) {
+  const served = await request(`${siteUrl}/${key}`);
+  const local = await readFile(join(distDir, key), 'utf8');
+  run(key, [...checkFile(key, served.snapshot), ...checkFileBody(key, served.body, local)]);
 }
 
 if (failures.length > 0) {
