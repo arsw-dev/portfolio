@@ -7,6 +7,7 @@ import {
   contentTypeFor,
   createBuildId,
   formatRecord,
+  isFromTheFuture,
   parseBuildTime,
   parseRecord,
   recordKey,
@@ -42,6 +43,13 @@ describe('createBuildId / parseBuildTime', () => {
     const ids = [daysAgo(1), daysAgo(30), buildAt(1), daysAgo(400)];
     const byTime = ids.toSorted((a, b) => parseBuildTime(a).getTime() - parseBuildTime(b).getTime());
     assert.deepEqual(ids.toSorted(), byTime);
+  });
+
+  it('flags IDs dated beyond the clock-skew tolerance as from the future', () => {
+    const tolerance = 5 * 60 * 1000;
+    assert.equal(isFromTheFuture(buildAt(-1), NOW, tolerance), true);
+    assert.equal(isFromTheFuture(createBuildId(new Date(NOW.getTime() + 4 * 60 * 1000)), NOW, tolerance), false);
+    assert.equal(isFromTheFuture(buildAt(1), NOW, tolerance), false);
   });
 
   it('rejects malformed IDs', () => {

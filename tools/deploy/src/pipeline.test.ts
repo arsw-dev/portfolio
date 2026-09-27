@@ -242,6 +242,20 @@ describe('deploy pipeline', () => {
     assert.ok(logs.some(line => line.includes('ignoring _deploys/README.md')));
   });
 
+  it('ignores a build record dated in the future instead of treating it as the newest deploy', async () => {
+    const { bucket, clock, logs, run } = setup();
+    await run(siteBuild('a1', ['old-logo.svg']));
+    clock.advance(DAY_MS);
+    // A deploy from a machine whose clock ran a year fast, listing only its own files
+    bucket.seed('_deploys/20270101T000000Z-fffffff.txt', clock.now(), 'index.html\nassets/index-ffXy12ab.js\n');
+
+    const result = await run(siteBuild('b2'));
+
+    // The previous deploy is still a1, so its dropped file is recognised as stale
+    assert.deepEqual(result.staleDeleted, ['old-logo.svg']);
+    assert.ok(logs.some(line => line.includes('ignoring _deploys/20270101T000000Z-fffffff.txt: dated in the future')));
+  });
+
   it('writes nothing and invalidates nothing in a dry run', async () => {
     const { bucket, cdn, clock, run } = setup();
     await run(siteBuild('a1', ['old-logo.svg']));

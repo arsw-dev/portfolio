@@ -23,6 +23,7 @@ import {
   createBuildId,
   formatRecord,
   isAsset,
+  isFromTheFuture,
   isHashedAsset,
   parseRecord,
   RECORD_PREFIX,
@@ -77,6 +78,7 @@ type DeployResult = {
 
 const UPLOAD_CONCURRENCY = 8;
 const RECENT_UPLOAD_GRACE_MS = 60 * 60 * 1000;
+const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000;
 
 const forEachConcurrently = async <T>(items: T[], limit: number, action: (item: T) => Promise<void>): Promise<void> => {
   const queue = [...items];
@@ -133,7 +135,10 @@ const deploy = async ({
   const previousIds: string[] = [];
   for (const { key } of await store.list(RECORD_PREFIX)) {
     const id = buildIdFromRecordKey(key);
-    if (id) {
+    if (id && isFromTheFuture(id, now(), CLOCK_SKEW_TOLERANCE_MS)) {
+      log(`    ignoring ${key}: dated in the future (a deploy from a machine with a wrong clock?); delete it once checked`);
+    }
+    else if (id) {
       previousIds.push(id);
     }
     else {
