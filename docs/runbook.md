@@ -39,13 +39,13 @@ A file restored this way is replaced again by the next deploy if the build still
 
 ## Terraform says the state is locked
 
-Terraform locks state with a file next to it (`<state key>.tflock`). A crashed or killed run can leave it behind, and every later plan or apply fails with "Error acquiring the state lock".
+Terraform locks state with a file next to it (`<state key>.tflock`). A crashed or killed run can leave it behind, and every later plan or apply fails with "Error acquiring the state lock". CI plans run with `-lock=false` and can't write lock files, so a stuck lock comes from a laptop run.
 
 1. See who holds it:
    ```sh
    aws s3 cp s3://arsw-dev-tfstate-559401928721-us-east-1/portfolio/terraform.tfstate.tflock - | jq '{ID, Operation, Who, Created}'
    ```
-2. Make sure that run is really over. `Who` like `runner@…` is a GitHub Actions run: check the Actions tab. Otherwise it's a laptop: check no `terraform` is still running there.
+2. Make sure that run is really over: check no `terraform` is still running on the machine in `Who`.
 3. Remove it from the root that owns that state:
    ```sh
    cd infra            # or infra/bootstrap for bootstrap/terraform.tfstate
@@ -60,12 +60,25 @@ Never force-unlock a lock whose run might still be going. Two runs writing the s
 - _"Missing X-Auth-Key, X-Auth-Email or Authorization headers"_ locally: your shell doesn't have `CLOUDFLARE_API_TOKEN`. Open a new terminal or load it again.
 - _Authentication errors with a token set_: the token may have expired or been rolled. CI's token needs DNS:Read on the zone; the local one needs DNS:Edit.
 
+## Onboard a domain (pre-flight)
+
+The one-apply Cloudflare flow requests the certificate, creates its validation records, waits for issuance, creates the distribution, then points the domains at it. Check these first, or that apply fails partway:
+
+1. **The zone is active.** In Cloudflare the zone shows _Active_, meaning the nameservers have switched. On a _pending_ zone, records exist but aren't served, so validation waits until it times out (75 minutes).
+2. **The site names are free.** There's no A, AAAA or CNAME record at the apex or `www` (or whichever names the site uses). Cloudflare won't create a second one, so the apply fails after the certificate and distribution are made. If the domain already hosts a website, choose one:
+   - Import the existing records into the site's DNS module (`import { to = module.site_dns.cloudflare_dns_record.this["<domain>"], id = "<zone id>/<record id>" }`), so the apply updates them in place and switches over with no gap.
+   - Or delete them just before the apply, accepting a short outage.
+3. **CAA allows Amazon.** If the zone has CAA records, one must allow `amazon.com` (for example `0 issue "amazon.com"`). Otherwise ACM can't issue and validation waits until it times out.
+4. **Other records are yours to keep.** Email (MX, SPF, DKIM) and anything else stay untouched. Terraform only manages the records the site's DNS modules create or import.
+
+With DNS managed elsewhere, use `attach_domains = false` first. The apply requests the certificate and outputs `certificate_validation_records`. Add those records, and the `domain_records` CNAMEs once you're ready to switch, then set `attach_domains = true` and apply again.
+
 ## Add another Terraform root
 
 The CI plan role can only read and lock state files it's told about.
 
 1. Pick the new root's backend key (for example `staging/terraform.tfstate`).
-2. Add it to `state_keys` in `infra/bootstrap/main.tf` and apply `infra/bootstrap`.
+2. Add it to `state_keys` in `infra/bootstrap/main.tf` and apply `infra/bootstrap`. That lets the plan role read that state.
 3. If the root manages a site, pass `plan_role_name` to `static-site` so the plan role can read that site's resources.
 4. Add plan steps for the root to `.github/workflows/ci.yml`.
 
@@ -91,4 +104,15 @@ CI pins an exact Terraform version (`terraform_version` in `.github/workflows/ci
 | `_deploys/`     | One record per deploy listing every file it uploaded; never served (404)                                             | Deploys write them; kept as deploy history                                                               |
 | everything else | `index.html` and files from `public/`, revalidated on every request                                                  | Deploys upload; a file is deleted only if the previous deploy uploaded it and this build doesn't have it |
 
-`assets/` is reserved for build output: pruning deletes any file there that no recent build lists, including one placed by hand. Outside `assets/`, files you place in the bucket by hand are never deleted by a deploy. The smoke test after each deploy checks the live site is the new build, every referenced asset and `.well-known` file is served correctly, missing files are 404, and build records aren't served.
+Files you place in the bucket by hand are never deleted by a deploy. The smoke test after each deploy checks the live site is the new build, every referenced asset and `.well-known` file is served correctly, missing files are 404, and build records aren't served.
+
+### Known edges
+
+- **Build records** are answered with 404 by the routing function, and CloudFront is also denied `_deploys/*` in the bucket policy, so encoded paths like `/%5Fdeploys/…` don't reach them either (they get 403).
+
+- **Racing deploys.** Only one Deploy workflow runs at a time. A deploy run from a laptop _at the same moment_ could prune an asset the other deploy skipped as already uploaded, breaking the site until the next deploy. Don't deploy by hand while a Deploy workflow is running.
+- **Failed deploys leave files.** A deploy that fails after uploading some root files, but before writing its record, leaves those files unowned: no later deploy deletes them. They're harmless. Delete them by hand if they bother you.
+
+## What CI Result guarantees
+
+`CI Result` is the only required check, and it comes from the PR's own `.github/workflows/ci.yml`. A PR that edits that file can make it pass, so **review workflow changes before merging**. Dependabot PRs skip the Plan job (they get no AWS credentials), so an action bump inside Plan first runs on the next human PR.
