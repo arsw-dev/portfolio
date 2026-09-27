@@ -6,8 +6,10 @@
 locals {
   templates_bucket_name = "arsw-dev-templates-559401928721-us-east-1"
   template_prefix       = "contractor-role/"
-  platform_repo         = "arsw-dev/spa-platform"
-  github_oidc_url       = "token.actions.githubusercontent.com"
+  # spa-platform uses GitHub's immutable OIDC subject (owner@id/repo@id, the default for new repos), which a rename or
+  # a re-created repo of the same name can't match
+  platform_sub_prefix = "repo:arsw-dev@186983646/spa-platform@1390922369"
+  github_oidc_url     = "token.actions.githubusercontent.com"
 }
 
 resource "aws_s3_bucket" "templates" {
@@ -79,7 +81,7 @@ resource "aws_iam_role" "release" {
         Action    = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringEquals = { "${local.github_oidc_url}:aud" = "sts.amazonaws.com" }
-          StringLike   = { "${local.github_oidc_url}:sub" = "repo:${local.platform_repo}:ref:refs/tags/v*" }
+          StringLike   = { "${local.github_oidc_url}:sub" = "${local.platform_sub_prefix}:ref:refs/tags/v*" }
         }
       }
     ]
