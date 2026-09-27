@@ -8,7 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createCloudFrontCdn, createS3Store } from './aws.ts';
 import { readDeployConfig } from './env.ts';
-import { listLocalFiles } from './files.ts';
+import { listLocalFiles, readHashedAssets } from './files.ts';
 import { deploy } from './pipeline.ts';
 
 const config = readDeployConfig();
@@ -17,6 +17,7 @@ await deploy({
   build: {
     keys: await listLocalFiles(config.distDir),
     read: key => readFile(join(config.distDir, key)),
+    hashedAssets: await readHashedAssets(config.distDir),
   },
   store: createS3Store(config.region, config.bucket),
   cdn: createCloudFrontCdn(config.region, config.distributionId),

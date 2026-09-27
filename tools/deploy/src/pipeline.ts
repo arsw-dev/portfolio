@@ -1,11 +1,11 @@
 // The deploy sequence, written against small Store/Cdn interfaces so it runs the same against S3 (aws.ts) and
 // against the in-memory fake in pipeline.test.ts.
 //
-// 1. Hashed assets (assets/) are uploaded with a one-year immutable cache and never deleted on upload,
-//    so tabs still running an older build can lazy-load their chunks. A hashed asset already in the bucket is
-//    skipped: the hash in its name means identical content, and S3 only creates an object once its upload
-//    completes. Re-uploading would just add identical versions to the versioned bucket.
-// 2. Everything else (index.html, public/ files) is uploaded with no-cache.
+// 1. Hashed assets (the files under assets/ that Vite's manifest lists) are uploaded with a one-year immutable
+//    cache and never deleted on upload, so tabs still running an older build can lazy-load their chunks. One
+//    already in the bucket with identical content (ETag = MD5) is skipped rather than adding an identical version.
+// 2. Everything else (index.html, public/ files, including unhashed files under assets/) is uploaded with
+//    no-cache, every time: their names don't change with their content.
 // 3. A build record (_deploys/<build id>.txt) lists every key uploaded. It's written only after all uploads
 //    succeed, so a failed deploy never counts as a build that went live.
 // 4. Root files the previous record lists but this build doesn't are deleted. Files nobody deployed are never
@@ -14,6 +14,7 @@
 // 6. Old assets are pruned (see selectKeptBuilds and assetsToDelete in plan.ts).
 
 import type { PrunePolicy, StoredObject } from './plan.ts';
+import { createHash } from 'node:crypto';
 import {
   ASSET_PREFIX,
   assetsToDelete,
@@ -54,6 +55,8 @@ type Cdn = {
 type LocalBuild = {
   keys: string[];
   read: (key: string) => Promise<Uint8Array>;
+  // Files under assets/ that Vite emitted (from its manifest); empty treats every file as unhashed
+  hashedAssets: ReadonlySet<string>;
 };
 
 type DeployOptions = {
@@ -110,14 +113,22 @@ const deploy = async ({
     await action();
   };
 
-  const upload = (keys: string[]): Promise<void> =>
+  const md5 = (body: Uint8Array): string => createHash('md5').update(body).digest('hex');
+
+  // Uploads keys, except hashed assets whose identical content (by ETag) is already in the bucket
+  const upload = (keys: string[], existing: ReadonlyMap<string, string | undefined>, skipped: string[]): Promise<void> =>
     forEachConcurrently(keys, UPLOAD_CONCURRENCY, async (key) => {
       const body = await build.read(key);
-      await write(`put ${key} (${cacheControlFor(key)})`, () => store.put({
+      const cacheControl = cacheControlFor(key, build.hashedAssets);
+      if (isHashedAsset(key, build.hashedAssets) && existing.get(key) === md5(body)) {
+        skipped.push(key);
+        return;
+      }
+      await write(`put ${key} (${cacheControl})`, () => store.put({
         key,
         body,
         contentType: contentTypeFor(key),
-        cacheControl: cacheControlFor(key),
+        cacheControl,
       }));
     });
 
@@ -147,17 +158,22 @@ const deploy = async ({
   }
   previousIds.sort();
 
-  const existingAssets = new Set((await store.list(ASSET_PREFIX)).map(({ key }) => key));
-  const skipped = assets.filter(key => isHashedAsset(key) && existingAssets.has(key));
-  const skippedSet = new Set(skipped);
-  const assetUploads = assets.filter(key => !skippedSet.has(key));
-  const uploaded = [...assetUploads, ...rootFiles];
+  if (build.hashedAssets.size === 0) {
+    log('    no Vite manifest: every file is treated as unhashed (no-cache, always uploaded)');
+  }
 
-  log(`==> Uploading assets (immutable): ${assetUploads.length} new, ${skipped.length} already in the bucket`);
-  await upload(assetUploads);
+  const existingAssets = new Map((await store.list(ASSET_PREFIX)).map(({ key, etag }) => [key, etag]));
+  const skippedList: string[] = [];
+
+  log('==> Uploading assets');
+  await upload(assets, existingAssets, skippedList);
+  const skipped = skippedList.toSorted();
+  log(`    ${assets.length - skipped.length} uploaded, ${skipped.length} identical already in the bucket`);
+  const skippedSet = new Set(skipped);
+  const uploaded = keys.filter(key => !skippedSet.has(key));
 
   log('==> Uploading everything else (no-cache)');
-  await upload(rootFiles);
+  await upload(rootFiles, new Map(), []);
 
   log('==> Recording build');
   await write(`put ${recordKey(buildId)}`, () => store.put({

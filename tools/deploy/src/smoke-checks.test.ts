@@ -77,26 +77,28 @@ describe('checkDeepLink', () => {
   });
 });
 
+const HASHED = new Set(['assets/index-BaXPYhR1.js']);
+
 describe('checkFile', () => {
   it('passes a hashed asset served immutable with its content type', () => {
     const served = response(200, { 'cache-control': 'public, max-age=31536000, immutable', 'content-type': 'text/javascript; charset=utf-8' });
-    assert.deepEqual(checkFile('assets/index-BaXPYhR1.js', served), []);
+    assert.deepEqual(checkFile('assets/index-BaXPYhR1.js', served, HASHED), []);
   });
 
   it('fails a hashed asset without long-lived caching', () => {
-    assert.equal(checkFile('assets/index-BaXPYhR1.js', response(200, { 'content-type': 'text/javascript' })).length, 1);
+    assert.equal(checkFile('assets/index-BaXPYhR1.js', response(200, { 'content-type': 'text/javascript' }), HASHED).length, 1);
   });
 
   it('expects an unhashed file under assets/ to revalidate', () => {
     const cachedForever = response(200, { 'cache-control': 'public, max-age=31536000, immutable', 'content-type': 'image/png' });
-    assert.deepEqual(checkFile('assets/logo.png', cachedForever), [
+    assert.deepEqual(checkFile('assets/logo.png', cachedForever, HASHED), [
       'expected cache-control to include "no-cache", got "public, max-age=31536000, immutable"',
     ]);
   });
 
   it('fails a .well-known file answered with the SPA shell', () => {
     const shell = response(200, { 'cache-control': 'no-cache', 'content-type': 'text/html; charset=utf-8' });
-    assert.deepEqual(checkFile('.well-known/apple-app-site-association', shell), [
+    assert.deepEqual(checkFile('.well-known/apple-app-site-association', shell, HASHED), [
       'expected content-type to include "application/json", got "text/html; charset=utf-8"',
     ]);
   });

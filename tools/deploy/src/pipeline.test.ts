@@ -3,6 +3,7 @@
 
 import type { Cdn, DeployOptions, Store, Upload } from './pipeline.ts';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { deploy } from './pipeline.ts';
 
@@ -29,9 +30,10 @@ const createFakeStore = (clock: Clock) => {
   let failPut: (key: string) => boolean = () => false;
 
   const store: Store = {
+    // Like S3, the ETag of a single-part upload is the MD5 of its content
     list: async prefix => [...objects.values()]
       .filter(({ key }) => key.startsWith(prefix))
-      .map(({ key, lastModified }) => ({ key, lastModified })),
+      .map(({ key, lastModified, body }) => ({ key, lastModified, etag: createHash('md5').update(body).digest('hex') })),
     getText: async (key) => {
       const object = objects.get(key);
       if (!object) {
@@ -78,9 +80,20 @@ const createFakeCdn = () => {
   return { cdn, invalidations };
 };
 
-const localBuild = (keys: string[]): DeployOptions['build'] => ({
+type BuildOptions = {
+  // Files under assets/ that Vite didn't emit (copied from public/assets/); everything else there is "hashed"
+  unhashed?: string[];
+  // No Vite manifest at all
+  noManifest?: boolean;
+  contents?: Record<string, string>;
+};
+
+const localBuild = (keys: string[], { unhashed = [], noManifest = false, contents = {} }: BuildOptions = {}): DeployOptions['build'] => ({
   keys,
-  read: async key => new TextEncoder().encode(`contents of ${key}`),
+  read: async key => new TextEncoder().encode(contents[key] ?? `contents of ${key}`),
+  hashedAssets: noManifest
+    ? new Set()
+    : new Set(keys.filter(key => key.startsWith('assets/') && !unhashed.includes(key))),
 });
 
 const setup = () => {
@@ -89,8 +102,8 @@ const setup = () => {
   const cdn = createFakeCdn();
   const logs: string[] = [];
 
-  const run = (keys: string[], overrides: Partial<DeployOptions> = {}) => deploy({
-    build: localBuild(keys),
+  const run = (keys: string[], overrides: Partial<DeployOptions> = {}, buildOptions: BuildOptions = {}) => deploy({
+    build: localBuild(keys, buildOptions),
     store: bucket.store,
     cdn: cdn.cdn,
     policy: { keepBuilds: 3, keepDays: 7 },
@@ -270,7 +283,7 @@ describe('deploy pipeline', () => {
     assert.equal(cdn.invalidations.length, 1);
   });
 
-  it('skips hashed assets already in the bucket but still records them', async () => {
+  it('skips a hashed asset whose identical content is already in the bucket, but still records it', async () => {
     const { bucket, clock, run } = setup();
     await run(siteBuild('a1', ['assets/vendor-Sh4red00.js']));
     clock.advance(DAY_MS);
@@ -283,16 +296,39 @@ describe('deploy pipeline', () => {
     assert.ok((await bucket.store.getText(`_deploys/${result.buildId}.txt`)).includes('assets/vendor-Sh4red00.js'));
   });
 
-  it('always re-uploads unhashed files under assets/, whose content can change under the same name', async () => {
+  it('uploads a hashed asset again when the bucket copy differs', async () => {
     const { bucket, clock, run } = setup();
-    await run(siteBuild('a1', ['assets/logo.png']));
-    clock.advance(DAY_MS);
-    const writesBefore = bucket.writes.length;
+    bucket.seed('assets/vendor-Sh4red00.js', clock.now(), 'a corrupted or hand-edited copy');
 
-    const result = await run(siteBuild('b2', ['assets/logo.png']));
+    const result = await run(siteBuild('a1', ['assets/vendor-Sh4red00.js']));
 
     assert.deepEqual(result.skipped, []);
-    assert.ok(bucket.writes.slice(writesBefore).includes('put assets/logo.png'));
+    assert.equal(await bucket.store.getText('assets/vendor-Sh4red00.js'), 'contents of assets/vendor-Sh4red00.js');
+  });
+
+  it('ships a changed hand-named file under assets/ even when its name looks hashed', async () => {
+    const { bucket, clock, run } = setup();
+    const photo = 'assets/team-member-1.jpg';
+    await run(siteBuild('a1', [photo]), {}, { unhashed: [photo], contents: { [photo]: 'OLD PHOTO' } });
+    clock.advance(DAY_MS);
+
+    const result = await run(siteBuild('a1', [photo]), {}, { unhashed: [photo], contents: { [photo]: 'NEW PHOTO' } });
+
+    assert.ok(!result.skipped.includes(photo));
+    assert.equal(await bucket.store.getText(photo), 'NEW PHOTO');
+    assert.equal(bucket.objects.get(photo)?.cacheControl, 'no-cache');
+  });
+
+  it('without a Vite manifest, caches nothing forever and skips nothing', async () => {
+    const { bucket, clock, logs, run } = setup();
+    await run(siteBuild('a1'), {}, { noManifest: true });
+    clock.advance(DAY_MS);
+
+    const result = await run(siteBuild('a1'), {}, { noManifest: true });
+
+    assert.deepEqual(result.skipped, []);
+    assert.equal(bucket.objects.get('assets/index-a1Xy12ab.js')?.cacheControl, 'no-cache');
+    assert.ok(logs.some(line => line.includes('no Vite manifest')));
   });
 
   it('refuses a build without index.html', async () => {

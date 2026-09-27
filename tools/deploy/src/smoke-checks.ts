@@ -50,9 +50,9 @@ const checkDeepLink = (response: ResponseSnapshot): string[] => [
 ];
 
 // A deployed file (key relative to the site root) is served with the cache and content type the deploy set
-const checkFile = (key: string, response: ResponseSnapshot): string[] => [
+const checkFile = (key: string, response: ResponseSnapshot, hashedAssets: ReadonlySet<string>): string[] => [
   ...expectStatus(response, 200),
-  ...expectHeader(response, 'cache-control', cacheControlFor(key)),
+  ...expectHeader(response, 'cache-control', cacheControlFor(key, hashedAssets)),
   ...expectHeader(response, 'content-type', contentTypeFor(key).split(';')[0]!),
 ];
 

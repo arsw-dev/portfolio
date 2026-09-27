@@ -10,6 +10,8 @@ import { arswTheme } from './src/lib/shiki-theme';
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  // dist/.vite/manifest.json lists every file Vite emitted; the deploy tool caches only those forever
+  build: { manifest: true },
   plugins: [
     { enforce: 'pre', ...mdx({ rehypePlugins: [[rehypePrettyCode, { theme: arswTheme }]] }) },
     devtools(),
