@@ -39,7 +39,8 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: ~> 1.12
+          # Exact version: must match the Terraform used for local applies (setup-terraform treats ~> as npm-style ~, i.e. patch-only)
+          terraform_version: 1.15.6
 
       - name: Format check
         run: terraform fmt -check -recursive
