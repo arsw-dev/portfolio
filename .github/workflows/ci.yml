@@ -159,6 +159,11 @@ jobs:
           # DNS:Read only for the arsw.dev zone; plans must never be able to change DNS
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          # An empty token isn't rejected by the provider; it sends unauthenticated requests that fail obscurely
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty. Add it as a repository secret (Settings → Secrets and variables → Actions → Repository secrets), not an environment secret or a variable."
+            exit 1
+          fi
           terraform -chdir=infra init -input=false
           terraform -chdir=infra validate
           terraform -chdir=infra plan -no-color -input=false 2>&1 | tee infra/plan.txt
