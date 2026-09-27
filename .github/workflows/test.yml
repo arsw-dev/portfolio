@@ -31,6 +31,42 @@ jobs:
 
       - run: pnpm --filter deploy test
 
+  terraform-modules:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [static-site, account-bootstrap]
+
+    defaults:
+      run:
+        working-directory: infra/modules/${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          # Exact version: must match the Terraform used for local applies (setup-terraform treats ~> as npm-style ~, i.e. patch-only)
+          terraform_version: 1.15.6
+
+      - run: terraform init -backend=false
+
+      - run: terraform test
+
+  cloudfront-function:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: node --test "infra/modules/static-site/functions/*.test.ts"
+
   actionlint:
     runs-on: ubuntu-latest
 

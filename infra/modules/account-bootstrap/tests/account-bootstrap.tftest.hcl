@@ -1,0 +1,139 @@
+# Offline tests for the account-bootstrap module. AWS is mocked, so these need no credentials and create nothing.
+
+mock_provider "aws" {
+  override_data {
+    target = data.aws_caller_identity.current
+    values = { account_id = "123456789012" }
+  }
+
+  mock_resource "aws_s3_bucket" {
+    defaults = { arn = "arn:aws:s3:::acme-tfstate" }
+  }
+}
+
+variables {
+  name              = "acme"
+  state_bucket_name = "acme-tfstate"
+  github_repo       = "acme-co/site"
+}
+
+run "state_bucket_is_versioned_encrypted_and_private" {
+  command = apply
+
+  assert {
+    condition     = aws_s3_bucket.state.bucket == "acme-tfstate"
+    error_message = "The state bucket should use the given name."
+  }
+
+  assert {
+    condition     = aws_s3_bucket_versioning.state.versioning_configuration[0].status == "Enabled"
+    error_message = "State must be versioned so a bad write can be rolled back."
+  }
+
+  assert {
+    condition     = one(aws_s3_bucket_server_side_encryption_configuration.state.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "AES256"
+    error_message = "State must be encrypted at rest."
+  }
+
+  assert {
+    condition = alltrue([
+      aws_s3_bucket_public_access_block.state.block_public_acls,
+      aws_s3_bucket_public_access_block.state.block_public_policy,
+      aws_s3_bucket_public_access_block.state.ignore_public_acls,
+      aws_s3_bucket_public_access_block.state.restrict_public_buckets,
+    ])
+    error_message = "All public access to state should be blocked."
+  }
+}
+
+run "creates_github_oidc_provider_by_default" {
+  command = apply
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 1
+    error_message = "The OIDC provider should be created by default."
+  }
+
+  assert {
+    condition     = aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com"
+    error_message = "The provider should point at GitHub Actions."
+  }
+
+  assert {
+    condition     = toset(aws_iam_openid_connect_provider.github[0].client_id_list) == toset(["sts.amazonaws.com"])
+    error_message = "The provider's audience should be STS."
+  }
+}
+
+run "reuses_an_existing_github_oidc_provider" {
+  command = apply
+
+  variables {
+    create_github_oidc_provider = false
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0
+    error_message = "No provider should be created when the account already has one."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Principal.Federated == "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    error_message = "The plan role should still trust the account's existing provider."
+  }
+
+  assert {
+    condition     = output.github_oidc_provider_arn == "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    error_message = "The output should point at the existing provider."
+  }
+}
+
+run "plan_role_trusts_only_pull_requests" {
+  command = apply
+
+  assert {
+    condition     = aws_iam_role.plan.name == "acme-terraform-plan"
+    error_message = "The plan role name should be <name>-terraform-plan."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:acme-co/site:pull_request"
+    error_message = "Only pull requests on the repo should be able to assume the plan role."
+  }
+
+  assert {
+    condition     = length(keys(jsondecode(aws_iam_role.plan.assume_role_policy).Statement[0].Condition)) == 1
+    error_message = "The trust policy should use exact matches only (no StringLike wildcards)."
+  }
+}
+
+run "plan_role_cannot_change_anything_but_the_lock_file" {
+  command = apply
+
+  # Every Allow statement other than StateLock is read-only (or TestFunction, which only executes code)
+  assert {
+    condition = alltrue(flatten([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement : [
+        for action in flatten([statement.Action]) :
+        can(regex("^[a-z0-9-]+:(Get|List|Describe)", action)) || action == "cloudfront:TestFunction"
+      ] if statement.Effect == "Allow" && statement.Sid != "StateLock"
+    ]))
+    error_message = "The plan role gained a write permission."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
+      statement.Sid == "StateLock" && statement.Resource == "arn:aws:s3:::acme-tfstate/*.tflock"
+    ])
+    error_message = "State writes should be limited to lock files."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.plan.policy).Statement :
+      statement.Effect == "Deny" && statement.Action == "s3:GetObject*" && statement.NotResource == "arn:aws:s3:::acme-tfstate/*"
+    ])
+    error_message = "Object reads outside the state bucket should be denied."
+  }
+}
