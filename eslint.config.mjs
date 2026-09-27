@@ -70,13 +70,4 @@ const reactConfig = await createConfig({
   },
 });
 
-// Node tools and infra tests: CLI output goes to stdout, and tests use the built-in node:test runner rather than Vitest
-const toolsConfig = {
-  files: ['tools/**/*', 'infra/**/*.test.ts'],
-  rules: {
-    'no-console': ['off'],
-    'test/no-import-node-test': ['off'],
-  },
-};
-
-export default defineConfig([baseConfig, reactConfig, toolsConfig]);
+export default defineConfig([baseConfig, reactConfig]);
