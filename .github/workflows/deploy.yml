@@ -8,6 +8,9 @@ on:
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
+      - tools/deploy/**
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
 
 concurrency:
   group: deploy-production
@@ -47,6 +50,17 @@ jobs:
     environment: production
 
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6.0.9
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter deploy
+
       - uses: actions/download-artifact@v8
         with:
           name: site-dist
@@ -54,9 +68,16 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::559401928721:role/arsw-portfolio-deploy
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
-      - run: aws s3 sync site/dist/ s3://arsw-dev-portfolio-559401928721-us-east-1-an --delete
+      - name: Deploy
+        run: node tools/deploy/src/deploy.ts site/dist
+        env:
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
 
-      - run: aws cloudfront create-invalidation --distribution-id EO00233KMPD0C --paths "/*"
+      - name: Smoke test
+        run: node tools/deploy/src/smoke.ts
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}

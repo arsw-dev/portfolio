@@ -6,6 +6,7 @@ trustPolicy: no-downgrade
 
 packages:
   - site/**
+  - tools/*
 
 # semver@6.3.1 (pulled in by @babel/core)
 # lacks provenance attestation; force 7.x which has it
@@ -23,6 +24,9 @@ catalogs:
     '@tailwindcss/vite': 4.3.0
     tailwindcss: 4.3.0
     vite: 8.0.16
+  aws:
+    '@aws-sdk/client-cloudfront': 3.1139.0
+    '@aws-sdk/client-s3': 3.1139.0
 
   linting:
     '@antfu/eslint-config': 9.0.0
