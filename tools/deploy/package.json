@@ -1,0 +1,19 @@
+{
+  "name": "deploy",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "deploy": "node src/deploy.ts",
+    "smoke": "node src/smoke.ts",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "catalog:aws",
+    "@aws-sdk/client-s3": "catalog:aws"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:tooling",
+    "typescript": "catalog:tooling"
+  }
+}
