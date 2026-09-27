@@ -137,3 +137,22 @@ run "plan_role_cannot_change_anything_but_the_lock_file" {
     error_message = "Object reads outside the state bucket should be denied."
   }
 }
+
+run "old_state_versions_expire_but_recent_history_is_kept" {
+  command = apply
+
+  assert {
+    condition     = aws_s3_bucket_lifecycle_configuration.state.rule[0].noncurrent_version_expiration[0].newer_noncurrent_versions == 5
+    error_message = "The 5 most recent old versions of each state file should always be kept."
+  }
+
+  assert {
+    condition     = aws_s3_bucket_lifecycle_configuration.state.rule[0].noncurrent_version_expiration[0].noncurrent_days == 30
+    error_message = "Older state versions should expire after 30 days."
+  }
+
+  assert {
+    condition     = aws_s3_bucket_lifecycle_configuration.state.rule[0].expiration[0].expired_object_delete_marker
+    error_message = "Delete markers left by lock-file churn should be cleaned up."
+  }
+}
