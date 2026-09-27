@@ -6,6 +6,9 @@ module "site" {
   bucket_name = var.bucket_name
   github_repo = "arsw-dev/portfolio"
 
+  # Created by infra/bootstrap (<name>-terraform-plan); the site grants it read on its own resources
+  plan_role_name = "arsw-dev-terraform-plan"
+
   validation_record_fqdns = values(module.certificate_dns.record_names)
 }
 
